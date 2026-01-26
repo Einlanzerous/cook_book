@@ -10,6 +10,23 @@ A modern recipe book web application built with Vue 3 and Express.
 - Search across recipes, ingredients, and tags
 - Responsive TailwindUI-inspired design
 
+## Screenshots
+
+### Home View
+Browse all recipes in a clean card grid layout with tag-based filtering tabs.
+
+![Home View](docs/images/example_home.png)
+
+### Recipe Detail
+View full recipe details including ingredients with serving size toggle and step-by-step directions.
+
+![Recipe Detail](docs/images/example_recipe.png)
+
+### Add Recipe
+Create new recipes with a comprehensive form for ingredients, directions, and tags.
+
+![Add Recipe](docs/images/example_add_recipe.png)
+
 ## Tech Stack
 
 ### Frontend
