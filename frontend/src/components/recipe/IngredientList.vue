@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { fraction, multiply } from 'fractionability'
 
 const props = defineProps({
   ingredients: {
@@ -18,65 +19,47 @@ const servingMultiplier = computed(() => {
   return selectedServings.value / (props.baseServings || 2)
 })
 
-// Scale an amount string (handles fractions like "1/2", "1 1/2", decimals, and integers)
+// Convert Unicode fractions to ASCII for the library
+function normalizeUnicodeFractions(str) {
+  if (!str) return str
+  return str
+    .toString()
+    .trim()
+    .replace(/¼/g, '1/4')
+    .replace(/½/g, '1/2')
+    .replace(/¾/g, '3/4')
+    .replace(/⅓/g, '1/3')
+    .replace(/⅔/g, '2/3')
+    .replace(/⅛/g, '1/8')
+    .replace(/⅜/g, '3/8')
+    .replace(/⅝/g, '5/8')
+    .replace(/⅞/g, '7/8')
+}
+
+// Scale an amount using fractionability library
 function scaleAmount(amount, multiplier) {
   if (!amount) return null
 
-  // Handle mixed fractions like "1 1/2"
-  const mixedMatch = amount.match(/^(\d+)\s+(\d+)\/(\d+)$/)
-  if (mixedMatch) {
-    const whole = parseInt(mixedMatch[1])
-    const num = parseInt(mixedMatch[2])
-    const denom = parseInt(mixedMatch[3])
-    const value = (whole + num / denom) * multiplier
-    return formatNumber(value)
-  }
+  const normalized = normalizeUnicodeFractions(amount)
 
-  // Handle simple fractions like "1/2"
-  const fractionMatch = amount.match(/^(\d+)\/(\d+)$/)
-  if (fractionMatch) {
-    const num = parseInt(fractionMatch[1])
-    const denom = parseInt(fractionMatch[2])
-    const value = (num / denom) * multiplier
-    return formatNumber(value)
-  }
+  try {
+    // Parse the fraction and multiply
+    const frac = fraction(normalized)
+    const scaled = multiply(frac, multiplier)
 
-  // Handle decimals and integers
-  const numValue = parseFloat(amount)
-  if (!isNaN(numValue)) {
-    return formatNumber(numValue * multiplier)
-  }
+    // Convert to mixed number for display (e.g., "1 1/2" instead of "3/2")
+    const result = scaled.toMixedNumber()
 
-  return amount
-}
-
-// Format number nicely (convert to fractions where sensible)
-function formatNumber(value) {
-  // Common fractions to display nicely
-  const fractions = [
-    { value: 0.25, display: '1/4' },
-    { value: 0.333, display: '1/3' },
-    { value: 0.5, display: '1/2' },
-    { value: 0.666, display: '2/3' },
-    { value: 0.75, display: '3/4' },
-  ]
-
-  const whole = Math.floor(value)
-  const decimal = value - whole
-
-  // Check if decimal part matches a common fraction
-  for (const frac of fractions) {
-    if (Math.abs(decimal - frac.value) < 0.05) {
-      if (whole === 0) return frac.display
-      return `${whole} ${frac.display}`
+    // Replace space with " & " for clarity in mixed numbers
+    if (result.includes(' ') && result.includes('/')) {
+      return result.replace(' ', ' & ')
     }
-  }
 
-  // Otherwise, format as decimal or integer
-  if (Number.isInteger(value)) {
-    return value.toString()
+    return result
+  } catch (e) {
+    // If parsing fails, return original
+    return amount
   }
-  return value.toFixed(1).replace(/\.0$/, '')
 }
 
 const scaledIngredients = computed(() => {

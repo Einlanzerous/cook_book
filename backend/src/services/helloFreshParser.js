@@ -132,13 +132,45 @@ function parseHtml($) {
   };
 }
 
+// Normalize Unicode fractions to ASCII
+function normalizeFractions(str) {
+  if (!str) return str;
+  return str
+    .replace(/¼/g, '1/4')
+    .replace(/½/g, '1/2')
+    .replace(/¾/g, '3/4')
+    .replace(/⅓/g, '1/3')
+    .replace(/⅔/g, '2/3')
+    .replace(/⅛/g, '1/8')
+    .replace(/⅜/g, '3/8')
+    .replace(/⅝/g, '5/8')
+    .replace(/⅞/g, '7/8')
+    .replace(/⅕/g, '1/5')
+    .replace(/⅖/g, '2/5')
+    .replace(/⅗/g, '3/5')
+    .replace(/⅘/g, '4/5')
+    .replace(/⅙/g, '1/6')
+    .replace(/⅚/g, '5/6');
+}
+
 function parseIngredientString(str) {
-  // Simple parsing: try to extract amount, unit, and name
-  const match = str.match(/^([\d./]+)?\s*(oz|ounce|lb|pound|cup|cups|tbsp|tsp|tablespoon|teaspoon|g|kg|ml|l|piece|pieces|clove|cloves|unit)?\s*(.+)$/i);
+  // Normalize Unicode fractions first
+  const normalized = normalizeFractions(str);
+
+  // Match: optional amount (including fractions), optional unit, then name
+  // Amount can be: "1", "1.5", "1/2", "1 1/2"
+  const match = normalized.match(/^([\d./\s]+?)?\s*(oz|ounce|ounces|lb|lbs|pound|pounds|cup|cups|tbsp|tsp|tablespoon|tablespoons|teaspoon|teaspoons|g|kg|ml|l|piece|pieces|clove|cloves|unit|units)?\s*(.+)$/i);
 
   if (match) {
+    let amount = match[1]?.trim() || null;
+
+    // Clean up amount - remove extra spaces around slashes
+    if (amount) {
+      amount = amount.replace(/\s*\/\s*/g, '/').trim();
+    }
+
     return {
-      amount: match[1] || null,
+      amount: amount,
       unit: match[2] || null,
       name: match[3]?.trim() || str
     };

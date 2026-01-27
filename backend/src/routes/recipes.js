@@ -2,6 +2,30 @@ import { Router } from 'express';
 
 const router = Router();
 
+// Normalize Unicode fractions to ASCII
+function normalizeFractions(str) {
+  if (!str) return str;
+  return str
+    .replace(/¼/g, '1/4')
+    .replace(/½/g, '1/2')
+    .replace(/¾/g, '3/4')
+    .replace(/⅓/g, '1/3')
+    .replace(/⅔/g, '2/3')
+    .replace(/⅛/g, '1/8')
+    .replace(/⅜/g, '3/8')
+    .replace(/⅝/g, '5/8')
+    .replace(/⅞/g, '7/8');
+}
+
+// Normalize ingredient amounts
+function normalizeIngredient(ing) {
+  return {
+    name: ing.name,
+    amount: normalizeFractions(ing.amount),
+    unit: ing.unit
+  };
+}
+
 // Convert string to Title Case
 function toTitleCase(str) {
   return str
@@ -102,11 +126,7 @@ router.post('/', async (req, res, next) => {
         source: source || 'manual',
         sourceUrl,
         ingredients: {
-          create: ingredients?.map(ing => ({
-            name: ing.name,
-            amount: ing.amount,
-            unit: ing.unit
-          })) || []
+          create: ingredients?.map(normalizeIngredient) || []
         },
         directions: {
           create: directions?.map((dir, index) => ({
@@ -158,11 +178,7 @@ router.put('/:id', async (req, res, next) => {
         source,
         sourceUrl,
         ingredients: {
-          create: ingredients?.map(ing => ({
-            name: ing.name,
-            amount: ing.amount,
-            unit: ing.unit
-          })) || []
+          create: ingredients?.map(normalizeIngredient) || []
         },
         directions: {
           create: directions?.map((dir, index) => ({
