@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/Einlanzerous/cook_book/compare/v1.1.0...v1.1.1) (2026-02-17)
+
+
+### Bug Fixes
+
+* Correctly apply migrations on app start ([831c394](https://github.com/Einlanzerous/cook_book/commit/831c394d1768960891d549c87d73210a068b38b2))
+
 ## [1.1.0](https://github.com/Einlanzerous/cook_book/compare/v1.0.0...v1.1.0) (2026-02-17)
 
 
