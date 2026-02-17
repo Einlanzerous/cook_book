@@ -7,8 +7,10 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Production
-FROM node:20-alpine
+FROM node:20-slim
 WORKDIR /app
+
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 # Copy backend files and install production dependencies
 COPY backend/package*.json ./
