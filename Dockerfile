@@ -25,6 +25,9 @@ RUN npx prisma generate
 # Copy built frontend into backend/public
 COPY --from=build-frontend /app/frontend/dist ./public/
 
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 3000
 
-CMD ["node", "src/index.js"]
+ENTRYPOINT ["docker-entrypoint.sh"]
