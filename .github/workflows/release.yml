@@ -62,6 +62,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Build identity for /api/health (SERV-128) — see Dockerfile.
+          #
+          # This job only runs when release-please actually cut a release, so
+          # unlike a tag-triggered publish workflow there is no main-build path
+          # whose metadata version output would be the literal "latest".
+          # `needs.release-please.outputs.version` is already BARE semver,
+          # matching org.opencontainers.image.version character for character —
+          # the agreement the delivery matrix depends on, since it compares the
+          # observed string and the reported label with strict equality.
+          build-args: |
+            APP_VERSION=${{ needs.release-please.outputs.version }}
+            GIT_SHA=${{ github.sha }}
 
       - name: Notify construct-server
         uses: peter-evans/repository-dispatch@v3
