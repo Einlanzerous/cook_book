@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/Einlanzerous/cook_book/compare/v1.1.1...v1.2.0) (2026-08-23)
+
+
+### Features
+
+* **health:** report version and sha on /api/health (SERV-128) ([#4](https://github.com/Einlanzerous/cook_book/issues/4)) ([08b870c](https://github.com/Einlanzerous/cook_book/commit/08b870ccfe85404347e3d3cccbf6804d3c581d99))
+
 ## [1.1.1](https://github.com/Einlanzerous/cook_book/compare/v1.1.0...v1.1.1) (2026-02-17)
 
 
