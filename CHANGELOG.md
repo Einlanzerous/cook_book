@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/Einlanzerous/cook_book/compare/v1.2.0...v1.2.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **deploy:** build and run on node 24, not the EOL node 20 (SERV-170) ([#6](https://github.com/Einlanzerous/cook_book/issues/6)) ([3ca3f58](https://github.com/Einlanzerous/cook_book/commit/3ca3f58a6bc0eb49612c2718c28860e4ab6c1c41))
+
 ## [1.2.0](https://github.com/Einlanzerous/cook_book/compare/v1.1.1...v1.2.0) (2026-08-23)
 
 
