@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:20-alpine AS build-frontend
+FROM node:24-alpine AS build-frontend
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Production
-FROM node:20-slim
+FROM node:24-slim
 WORKDIR /app
 
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
