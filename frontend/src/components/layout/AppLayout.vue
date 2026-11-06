@@ -1,12 +1,19 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useRecipeStore } from '../../stores/recipeStore'
 import AppHeader from './AppHeader.vue'
+import AppFooter from './AppFooter.vue'
 import TabNavigation from './TabNavigation.vue'
 import ImportModal from '../import/ImportModal.vue'
 
 const store = useRecipeStore()
+const route = useRoute()
 const showImportModal = ref(false)
+
+// The "What the F#@K should I make?" picker is built in COOK-12; until then the
+// header button emits this event and nothing listens.
+function onShowPicker() {}
 
 onMounted(() => {
   store.fetchRecipes()
@@ -15,13 +22,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <AppHeader @show-import="showImportModal = true" />
-    <TabNavigation />
+  <div class="flex min-h-screen flex-col bg-page text-ink">
+    <a href="#main" class="sr-only z-20 bg-fir px-4 py-2 text-page focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to content</a>
+    <AppHeader @show-picker="onShowPicker" />
+    <TabNavigation v-if="route.name === 'home'" />
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main id="main" class="mx-auto w-full max-w-page flex-1 px-5 py-8 sm:px-8">
       <slot />
     </main>
+
+    <AppFooter @show-import="showImportModal = true" />
 
     <ImportModal
       :show="showImportModal"

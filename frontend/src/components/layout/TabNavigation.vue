@@ -19,39 +19,31 @@ function selectTag(tagName) {
 function selectAll() {
   store.fetchRecipes(null)
 }
+
+// Underline-style filter links, as in the canvas's tag row.
+const base = 'flex shrink-0 items-baseline gap-1.5 border-b pb-[3px] text-sm transition-colors'
+const on = 'border-fir text-ink'
+const off = 'border-transparent text-muted hover:text-ink'
 </script>
 
 <template>
-  <nav class="bg-white border-b border-gray-200">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex space-x-1 overflow-x-auto py-3 scrollbar-hide">
-        <!-- All Recipes tab -->
-        <button
-          @click="selectAll"
-          :class="[
-            'flex-shrink-0 px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200',
-            !store.activeTag
-              ? 'bg-orange-100 text-orange-700'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          ]"
-        >
+  <nav aria-label="Filter by tag" class="border-b border-rule">
+    <div class="mx-auto max-w-page px-5 sm:px-8">
+      <div class="scrollbar-hide flex gap-[22px] overflow-x-auto py-3.5">
+        <button type="button" :aria-pressed="!store.activeTag" :class="[base, !store.activeTag ? on : off]" @click="selectAll">
           All Recipes
         </button>
 
-        <!-- Tag tabs -->
         <button
           v-for="tag in topTags"
           :key="tag.id"
+          type="button"
+          :aria-pressed="store.activeTag === tag.name"
+          :class="[base, store.activeTag === tag.name ? on : off]"
           @click="selectTag(tag.name)"
-          :class="[
-            'flex-shrink-0 px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200',
-            store.activeTag === tag.name
-              ? 'bg-orange-100 text-orange-700'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          ]"
         >
           {{ tag.name }}
-          <span class="ml-1 text-xs text-gray-400">({{ tag.recipeCount }})</span>
+          <span class="font-mono text-[11px] text-faint">{{ tag.recipeCount }}</span>
         </button>
       </div>
     </div>

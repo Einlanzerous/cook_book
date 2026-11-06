@@ -90,22 +90,22 @@ function formatIngredient(ing) {
 <template>
   <div>
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-gray-900 flex items-center">
-        <svg class="h-5 w-5 mr-2 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <h2 class="text-lg font-semibold text-ink flex items-center">
+        <svg class="h-5 w-5 mr-2 text-fir" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
         </svg>
         Ingredients
       </h2>
 
       <!-- Serving size toggle -->
-      <div class="flex items-center bg-gray-100 rounded-lg p-1">
+      <div class="flex items-center bg-rule-soft rounded-lg p-1">
         <button
           @click="selectedServings = 2"
           :class="[
             'px-3 py-1 text-sm font-medium rounded-md transition-colors',
             selectedServings === 2
-              ? 'bg-white text-orange-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-surface text-fir shadow-sm'
+              : 'text-muted hover:text-ink'
           ]"
         >
           2 servings
@@ -115,8 +115,8 @@ function formatIngredient(ing) {
           :class="[
             'px-3 py-1 text-sm font-medium rounded-md transition-colors',
             selectedServings === 4
-              ? 'bg-white text-orange-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-surface text-fir shadow-sm'
+              : 'text-muted hover:text-ink'
           ]"
         >
           4 servings
@@ -128,10 +128,10 @@ function formatIngredient(ing) {
       <li
         v-for="ingredient in scaledIngredients"
         :key="ingredient.id"
-        class="flex items-start p-2 rounded-lg hover:bg-gray-50 transition-colors"
+        class="flex items-start p-2 rounded-lg hover:bg-fir-tint transition-colors"
       >
-        <span class="w-2 h-2 mt-2 mr-3 bg-orange-400 rounded-full flex-shrink-0"></span>
-        <span class="text-gray-700">
+        <span class="w-2 h-2 mt-2 mr-3 bg-fir rounded-full flex-shrink-0"></span>
+        <span class="text-ink-soft">
           <span v-if="formatIngredient(ingredient).amountUnit" class="font-medium">
             {{ formatIngredient(ingredient).amountUnit }}
           </span>
@@ -140,7 +140,7 @@ function formatIngredient(ing) {
       </li>
     </ul>
 
-    <p v-if="!ingredients.length" class="text-gray-500 italic">
+    <p v-if="!ingredients.length" class="text-muted italic">
       No ingredients listed.
     </p>
   </div>
