@@ -74,3 +74,45 @@ export async function createScratchDb() {
     }
   };
 }
+
+export const migrationsDir = path.join(backendDir, 'prisma/migrations');
+
+/**
+ * A bare scratch database with NO migrations applied, for tests that stage
+ * data at an older schema and then apply a migration by hand.
+ * Returns { name, url, client (connected pg.Client), drop }.
+ */
+export async function createBareDb() {
+  const adminUrl = testDbUrl();
+  if (!adminUrl) throw new Error('No COOK_TEST_DATABASE_URL: use describeDb() so this is skipped.');
+  const { parsed } = parseTestDatabaseUrl(adminUrl);
+  const name = `cook_scratch_${randomBytes(6).toString('hex')}_test`;
+  const admin = new pg.Client({ connectionString: adminUrl });
+  await admin.connect();
+  try {
+    await admin.query(`CREATE DATABASE "${name}"`);
+  } finally {
+    await admin.end();
+  }
+  const u = new URL(parsed);
+  u.pathname = `/${name}`;
+  u.search = '';
+  const url = u.toString();
+  const client = new pg.Client({ connectionString: url });
+  await client.connect();
+  return {
+    name,
+    url,
+    client,
+    async drop() {
+      await client.end().catch(() => {});
+      const c = new pg.Client({ connectionString: adminUrl });
+      await c.connect();
+      try {
+        await c.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await c.end();
+      }
+    }
+  };
+}

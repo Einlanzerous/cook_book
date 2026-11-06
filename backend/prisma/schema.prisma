@@ -15,13 +15,36 @@ model Recipe {
   servings    Int?
   prepTime    Int?         // minutes
   cookTime    Int?         // minutes
-  source      String       @default("manual") // manual, hellofresh
+  source      String       @default("manual") // stored as written; read case-insensitively. 'manual' = no source label
   sourceUrl   String?
+  contributorId String?
+  contributor Contributor? @relation(fields: [contributorId], references: [id], onDelete: Restrict)
+  category    String?
+  cuisine     String?
+  vegetarian  Boolean      @default(false)
+  totalMinutes Int?
+  timeSplitEstimated Boolean @default(false)
+  notes       String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   ingredients Ingredient[]
   directions  Direction[]
   tags        Tag[]        @relation("RecipeTags")
+
+  @@index([contributorId])
+  @@index([totalMinutes])
+  // Raw index, not expressible here (shows as drift in migrate dev): CREATE INDEX "Recipe_lower_source_idx" ON "Recipe"(lower("source"))
+}
+
+model Contributor {
+  id          String   @id @default(uuid())
+  name        String   // unique on lower(name): raw index "Contributor_lower_name_key", not expressible here
+  bio         String?
+  portraitUrl String?
+  email       String?  @unique
+  externalId  String?  @unique
+  joinedAt    DateTime @default(now()) @db.Timestamptz(3)
+  recipes     Recipe[]
 }
 
 model Ingredient {
@@ -29,6 +52,7 @@ model Ingredient {
   name     String
   amount   String?
   unit     String?
+  quantity Float?  // derived from amount on write; NULL for ranges/words
   recipeId String
   recipe   Recipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 }
@@ -37,6 +61,7 @@ model Direction {
   id          String @id @default(uuid())
   stepNumber  Int
   instruction String
+  heading     String?
   recipeId    String
   recipe      Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 }
