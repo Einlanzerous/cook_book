@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import randomRouter from './routes/random.js';
 import recipesRouter from './routes/recipes.js';
 import tagsRouter from './routes/tags.js';
 import importRouter from './routes/import.js';
@@ -33,6 +34,8 @@ export function createApp({ prisma }) {
   });
 
   // Routes
+  // Before recipesRouter, or '/:id' would swallow 'random'.
+  app.use('/api/recipes/random', randomRouter);
   app.use('/api/recipes', recipesRouter);
   app.use('/api/tags', tagsRouter);
   app.use('/api/import', importRouter);
