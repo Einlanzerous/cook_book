@@ -4,10 +4,8 @@ import { useRecipeStore } from '../../stores/recipeStore'
 import AppHeader from './AppHeader.vue'
 import AppFooter from './AppFooter.vue'
 import PickerModal from '../picker/PickerModal.vue'
-import ImportModal from '../import/ImportModal.vue'
 
 const store = useRecipeStore()
-const showImportModal = ref(false)
 
 const showPicker = ref(false)
 
@@ -26,13 +24,8 @@ onMounted(() => {
       <slot />
     </main>
 
-    <AppFooter @show-import="showImportModal = true" />
+    <AppFooter />
 
     <PickerModal :show="showPicker" @close="showPicker = false" />
-
-    <ImportModal
-      :show="showImportModal"
-      @close="showImportModal = false"
-    />
   </div>
 </template>

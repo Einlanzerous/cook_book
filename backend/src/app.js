@@ -6,6 +6,7 @@ import randomRouter from './routes/random.js';
 import recipesRouter from './routes/recipes.js';
 import tagsRouter from './routes/tags.js';
 import importRouter from './routes/import.js';
+import importPreviewRouter from './routes/importPreview.js';
 import contributorsRouter from './routes/contributors.js';
 import { recipeInclude, presentRecipe } from './services/recipeShape.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -38,6 +39,7 @@ export function createApp({ prisma }) {
   app.use('/api/recipes/random', randomRouter);
   app.use('/api/recipes', recipesRouter);
   app.use('/api/tags', tagsRouter);
+  app.use('/api/import', importPreviewRouter);
   app.use('/api/import', importRouter);
   app.use('/api/contributors', contributorsRouter);
 
