@@ -39,18 +39,13 @@ onMounted(async () => {
     </div>
 
     <!-- Edit form -->
-    <div v-else-if="recipe">
-      <div class="mb-6">
-        <router-link :to="`/recipe/${recipe.id}`" class="inline-flex items-center text-sm text-muted hover:text-ink-soft mb-2">
-          <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          Back to recipe
-        </router-link>
-        <h1 class="text-2xl font-bold text-ink">Edit Recipe</h1>
+    <section v-else-if="recipe" class="mx-auto flex w-full max-w-[880px] flex-col gap-10 py-6">
+      <div class="flex flex-col gap-3.5">
+        <router-link :to="`/recipe/${recipe.id}`" class="text-sm !text-muted no-underline hover:!text-ink">&larr; Back to recipe</router-link>
+        <h1 class="font-serif text-[40px] font-normal leading-tight tracking-tight sm:text-[52px]">Edit recipe</h1>
       </div>
 
       <RecipeForm :recipe="recipe" />
-    </div>
+    </section>
   </div>
 </template>

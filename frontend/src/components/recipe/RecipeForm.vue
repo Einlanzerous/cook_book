@@ -2,321 +2,291 @@
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRecipeStore } from '../../stores/recipeStore'
+import { splitIngredientList, looksLikeList } from '../../lib/ingredientLine'
+import { emptyForm, formFromRecipe, validateForm, buildPayload } from '../../lib/recipeForm'
 import TagInput from './TagInput.vue'
+import CookPicker from './CookPicker.vue'
 
+// "Write it out" (and Edit). With `recipe` it edits that recipe; the PUT sends
+// only what this form owns, and the form loads everything it shows (headings,
+// notes, cook, category...) so an edit cannot erase them. See lib/recipeForm.js.
 const props = defineProps({
-  recipe: {
-    type: Object,
-    default: null
-  }
+  recipe: { type: Object, default: null }
 })
 
-const emit = defineEmits(['submit'])
 const router = useRouter()
 const store = useRecipeStore()
 
-const form = reactive({
-  title: '',
-  description: '',
-  imageUrl: '',
-  servings: null,
-  prepTime: null,
-  cookTime: null,
-  ingredients: [{ name: '', amount: '', unit: '' }],
-  directions: [''],
-  tags: []
-})
-
+const form = reactive(props.recipe ? formFromRecipe(props.recipe) : emptyForm())
+const errors = reactive({})
 const loading = ref(false)
-const error = ref('')
+const submitError = ref('')
 
 onMounted(() => {
   store.fetchTags()
-
-  if (props.recipe) {
-    form.title = props.recipe.title || ''
-    form.description = props.recipe.description || ''
-    form.imageUrl = props.recipe.imageUrl || ''
-    form.servings = props.recipe.servings
-    form.prepTime = props.recipe.prepTime
-    form.cookTime = props.recipe.cookTime
-    form.ingredients = props.recipe.ingredients?.length
-      ? props.recipe.ingredients.map(i => ({ name: i.name, amount: i.amount || '', unit: i.unit || '' }))
-      : [{ name: '', amount: '', unit: '' }]
-    form.directions = props.recipe.directions?.length
-      ? props.recipe.directions.map(d => d.instruction)
-      : ['']
-    form.tags = props.recipe.tags?.map(t => t.name) || []
-  }
 })
 
+// Total follows prep + cook until the user types a total of their own.
+watch(
+  () => [form.prepTime, form.cookTime],
+  ([prep, cook]) => {
+    if (form.totalTouched) return
+    const sum = (Number(prep) || 0) + (Number(cook) || 0)
+    form.totalMinutes = prep === '' && cook === '' ? '' : String(sum)
+  }
+)
+
 function addIngredient() {
-  form.ingredients.push({ name: '', amount: '', unit: '' })
+  form.ingredients.push({ amount: '', unit: '', name: '' })
 }
-
 function removeIngredient(index) {
-  if (form.ingredients.length > 1) {
-    form.ingredients.splice(index, 1)
-  }
+  if (form.ingredients.length > 1) form.ingredients.splice(index, 1)
+}
+function addStep() {
+  form.directions.push({ heading: '', instruction: '' })
+}
+function removeStep(index) {
+  if (form.directions.length > 1) form.directions.splice(index, 1)
 }
 
-function addDirection() {
-  form.directions.push('')
-}
-
-function removeDirection(index) {
-  if (form.directions.length > 1) {
-    form.directions.splice(index, 1)
-  }
+// Paste a whole list into an ingredient name: one ingredient per line is split
+// into amount / unit / name rows. A single line pastes as normal text.
+function onIngredientPaste(e, index) {
+  const text = e.clipboardData?.getData('text') ?? ''
+  if (!looksLikeList(text)) return
+  e.preventDefault()
+  const rows = splitIngredientList(text)
+  const current = form.ingredients[index]
+  const replaceCurrent = !current.amount && !current.unit && !current.name.trim()
+  form.ingredients.splice(replaceCurrent ? index : index + 1, replaceCurrent ? 1 : 0, ...rows)
 }
 
 async function handleSubmit() {
-  if (!form.title.trim()) {
-    error.value = 'Title is required'
+  for (const k of Object.keys(errors)) delete errors[k]
+  submitError.value = ''
+  Object.assign(errors, validateForm(form, props.recipe).errors)
+  if (Object.keys(errors).length) {
+    submitError.value = 'A few things need another look.'
     return
   }
 
   loading.value = true
-  error.value = ''
-
   try {
-    const recipeData = {
-      title: form.title.trim(),
-      description: form.description.trim() || null,
-      imageUrl: form.imageUrl.trim() || null,
-      servings: form.servings || null,
-      prepTime: form.prepTime || null,
-      cookTime: form.cookTime || null,
-      ingredients: form.ingredients.filter(i => i.name.trim()),
-      directions: form.directions.filter(d => d.trim()),
-      tags: form.tags
-    }
-
+    const payload = buildPayload(form, props.recipe)
     if (props.recipe) {
-      await store.updateRecipe(props.recipe.id, recipeData)
+      await store.updateRecipe(props.recipe.id, payload)
       router.push(`/recipe/${props.recipe.id}`)
     } else {
-      const newRecipe = await store.createRecipe(recipeData)
-      router.push(`/recipe/${newRecipe.id}`)
+      const created = await store.createRecipe(payload)
+      router.push(`/recipe/${created.id}`)
     }
   } catch (e) {
-    error.value = e.response?.data?.error || 'Failed to save recipe'
+    submitError.value = e.response?.data?.error || 'Failed to save recipe'
   } finally {
     loading.value = false
   }
 }
 
 function cancel() {
-  if (props.recipe) {
-    router.push(`/recipe/${props.recipe.id}`)
-  } else {
-    router.push('/')
-  }
+  router.push(props.recipe ? `/recipe/${props.recipe.id}` : '/')
 }
 </script>
 
 <template>
-  <form @submit.prevent="handleSubmit" class="space-y-8">
-    <!-- Error message -->
-    <div v-if="error" class="bg-danger-tint border border-danger/30 text-danger px-4 py-3 rounded-lg">
-      {{ error }}
+  <form class="flex flex-col gap-11" novalidate @submit.prevent="handleSubmit">
+    <div v-if="submitError" class="rounded border border-danger/30 bg-danger-tint px-4 py-3 text-danger" role="alert">
+      {{ submitError }}
     </div>
 
-    <!-- Basic info -->
-    <div class="bg-surface rounded-xl shadow-sm border border-rule-soft p-6">
-      <h2 class="text-lg font-semibold text-ink mb-4">Basic Information</h2>
+    <div class="flex flex-col gap-6">
+      <div>
+        <input
+          id="title"
+          v-model="form.title"
+          type="text"
+          aria-label="Recipe title"
+          placeholder="Recipe title"
+          class="input !py-2 font-serif !text-[34px] leading-tight"
+          :aria-invalid="!!errors.title"
+        />
+        <p v-if="errors.title" class="mt-1 text-sm text-danger">{{ errors.title }}</p>
+      </div>
 
-      <div class="grid grid-cols-1 gap-6">
-        <div>
-          <label for="title" class="label">Title *</label>
+      <textarea
+        id="description"
+        v-model="form.description"
+        rows="2"
+        aria-label="Description"
+        class="input leading-relaxed"
+        placeholder="A line or two about it — where it's from, why it's good."
+      />
+
+      <div class="grid grid-cols-2 gap-6 sm:grid-cols-4">
+        <label class="flex flex-col">
+          <span class="label">Serves</span>
+          <input v-model="form.servings" type="number" min="1" class="input" placeholder="4" />
+          <span v-if="errors.servings" class="mt-1 text-sm text-danger">{{ errors.servings }}</span>
+        </label>
+        <label class="flex flex-col">
+          <span class="label">Prep (min)</span>
+          <input v-model="form.prepTime" type="number" min="0" class="input" placeholder="15" />
+          <span v-if="errors.prepTime" class="mt-1 text-sm text-danger">{{ errors.prepTime }}</span>
+        </label>
+        <label class="flex flex-col">
+          <span class="label">Cook (min)</span>
+          <input v-model="form.cookTime" type="number" min="0" class="input" placeholder="30" />
+          <span v-if="errors.cookTime" class="mt-1 text-sm text-danger">{{ errors.cookTime }}</span>
+        </label>
+        <label class="flex flex-col">
+          <span class="label">Total (min)</span>
           <input
-            id="title"
-            v-model="form.title"
+            v-model="form.totalMinutes"
+            type="number"
+            min="0"
+            class="input"
+            placeholder="45"
+            @input="form.totalTouched = true"
+          />
+          <span v-if="errors.totalMinutes" class="mt-1 text-sm text-danger">{{ errors.totalMinutes }}</span>
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:items-end">
+        <label class="flex flex-col">
+          <span class="label">Category</span>
+          <input v-model="form.category" type="text" class="input" placeholder="Main course" />
+        </label>
+        <label class="flex flex-col">
+          <span class="label">Cuisine</span>
+          <input v-model="form.cuisine" type="text" class="input" placeholder="Korean" />
+        </label>
+        <label class="flex cursor-pointer items-center gap-3 py-2 text-base text-ink">
+          <input v-model="form.vegetarian" type="checkbox" class="h-4 w-4 rounded-sm border-rule-strong text-fir focus:ring-fir" />
+          Vegetarian
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <label class="flex flex-col">
+          <span class="label">Source</span>
+          <input
+            id="source"
+            v-model="form.source"
             type="text"
-            required
             class="input"
-            placeholder="Recipe title"
+            placeholder="Grandma's card, a cookbook, a site"
+            :aria-invalid="!!errors.source"
           />
-        </div>
+          <span v-if="errors.source" class="mt-1 text-sm text-danger">{{ errors.source }}</span>
+        </label>
+        <label class="flex flex-col">
+          <span class="label">Source link (optional)</span>
+          <input v-model="form.sourceUrl" type="url" class="input" placeholder="https://" :aria-invalid="!!errors.sourceUrl" />
+          <span v-if="errors.sourceUrl" class="mt-1 text-sm text-danger">{{ errors.sourceUrl }}</span>
+        </label>
+      </div>
 
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <div>
-          <label for="description" class="label">Description</label>
-          <textarea
-            id="description"
-            v-model="form.description"
-            rows="3"
-            class="input"
-            placeholder="A brief description of this recipe"
-          />
-        </div>
-
-        <div>
-          <label for="imageUrl" class="label">Image URL</label>
-          <input
-            id="imageUrl"
-            v-model="form.imageUrl"
-            type="url"
-            class="input"
-            placeholder="https://example.com/image.jpg"
-          />
-        </div>
-
-        <div class="grid grid-cols-3 gap-4">
-          <div>
-            <label for="servings" class="label">Servings</label>
-            <input
-              id="servings"
-              v-model.number="form.servings"
-              type="number"
-              min="1"
-              class="input"
-              placeholder="4"
-            />
-          </div>
-          <div>
-            <label for="prepTime" class="label">Prep Time (min)</label>
-            <input
-              id="prepTime"
-              v-model.number="form.prepTime"
-              type="number"
-              min="0"
-              class="input"
-              placeholder="15"
-            />
-          </div>
-          <div>
-            <label for="cookTime" class="label">Cook Time (min)</label>
-            <input
-              id="cookTime"
-              v-model.number="form.cookTime"
-              type="number"
-              min="0"
-              class="input"
-              placeholder="30"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label class="label">Tags</label>
+          <span class="label">Tags</span>
           <TagInput v-model="form.tags" />
         </div>
+        <CookPicker id="filed-as" v-model="form.contributorId" :error="errors.contributorId" />
+      </div>
+
+      <!-- Photo upload is COOK-25. Until then: an image link, and an honest note. -->
+      <div class="flex flex-col gap-3 rounded border border-dashed border-rule-strong p-5">
+        <div class="flex items-baseline justify-between gap-3">
+          <span class="label !mb-0">Photo</span>
+          <span class="eyebrow">Upload coming soon</span>
+        </div>
+        <input v-model="form.imageUrl" type="url" class="input" placeholder="Paste an image link for now" aria-label="Image link" />
       </div>
     </div>
 
-    <!-- Ingredients -->
-    <div class="bg-surface rounded-xl shadow-sm border border-rule-soft p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-ink">Ingredients</h2>
+    <div class="flex flex-col gap-4">
+      <div class="flex items-baseline justify-between">
+        <h2 class="font-serif text-[26px] font-medium">Ingredients</h2>
+        <button type="button" class="text-sm text-fir hover:text-fir-dark" @click="addIngredient">+ Add line</button>
+      </div>
+      <div
+        v-for="(ingredient, index) in form.ingredients"
+        :key="index"
+        class="grid grid-cols-[64px_84px_1fr_auto] items-center gap-3 sm:gap-4"
+        data-test="ingredient-row"
+      >
+        <input v-model="ingredient.amount" type="text" class="input font-mono !text-sm" placeholder="¾" aria-label="Amount" />
+        <input v-model="ingredient.unit" type="text" class="input !text-[15px]" placeholder="cup" aria-label="Unit" />
+        <input
+          v-model="ingredient.name"
+          type="text"
+          class="input !text-[15px]"
+          placeholder="Jasmine rice"
+          aria-label="Ingredient"
+          @paste="onIngredientPaste($event, index)"
+        />
         <button
           type="button"
-          @click="addIngredient"
-          class="text-sm text-fir hover:text-fir-dark font-medium"
+          class="p-1 text-faint hover:text-danger disabled:opacity-40"
+          :disabled="form.ingredients.length === 1"
+          :aria-label="`Remove ingredient ${index + 1}`"
+          @click="removeIngredient(index)"
         >
-          + Add ingredient
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
-
-      <div class="space-y-3">
-        <div
-          v-for="(ingredient, index) in form.ingredients"
-          :key="index"
-          class="flex items-center gap-3"
-        >
-          <input
-            v-model="ingredient.amount"
-            type="text"
-            class="input w-20"
-            placeholder="Amt"
-          />
-          <input
-            v-model="ingredient.unit"
-            type="text"
-            class="input w-24"
-            placeholder="Unit"
-          />
-          <input
-            v-model="ingredient.name"
-            type="text"
-            class="input flex-1"
-            placeholder="Ingredient name"
-          />
-          <button
-            type="button"
-            @click="removeIngredient(index)"
-            class="text-faint hover:text-danger p-1"
-            :disabled="form.ingredients.length === 1"
-          >
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <p v-if="errors.ingredients" class="text-sm text-danger">{{ errors.ingredients }}</p>
+      <p class="text-[13px] text-faint">Tip: paste a whole list — one ingredient per line — and we'll split amounts and units.</p>
     </div>
 
-    <!-- Directions -->
-    <div class="bg-surface rounded-xl shadow-sm border border-rule-soft p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-ink">Directions</h2>
+    <div class="flex flex-col gap-4">
+      <div class="flex items-baseline justify-between">
+        <h2 class="font-serif text-[26px] font-medium">Method</h2>
+        <button type="button" class="text-sm text-fir hover:text-fir-dark" @click="addStep">+ Add step</button>
+      </div>
+      <div
+        v-for="(step, index) in form.directions"
+        :key="index"
+        class="grid grid-cols-[40px_1fr_auto] items-start gap-4"
+        data-test="step-row"
+      >
+        <span class="font-serif text-[28px] leading-[1.2] text-fir">{{ index + 1 }}</span>
+        <div class="flex flex-col gap-1">
+          <input v-model="step.heading" type="text" class="input !text-[15px] font-semibold" placeholder="Heading (optional)" aria-label="Step heading" />
+          <textarea v-model="step.instruction" rows="3" class="input leading-relaxed" placeholder="Describe the step." aria-label="Step" />
+        </div>
         <button
           type="button"
-          @click="addDirection"
-          class="text-sm text-fir hover:text-fir-dark font-medium"
+          class="p-1 text-faint hover:text-danger disabled:opacity-40"
+          :disabled="form.directions.length === 1"
+          :aria-label="`Remove step ${index + 1}`"
+          @click="removeStep(index)"
         >
-          + Add step
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
-
-      <div class="space-y-3">
-        <div
-          v-for="(direction, index) in form.directions"
-          :key="index"
-          class="flex items-start gap-3"
-        >
-          <span class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-fir-tint text-fir font-semibold rounded-full mt-2">
-            {{ index + 1 }}
-          </span>
-          <textarea
-            v-model="form.directions[index]"
-            rows="2"
-            class="input flex-1"
-            :placeholder="`Step ${index + 1}`"
-          />
-          <button
-            type="button"
-            @click="removeDirection(index)"
-            class="text-faint hover:text-danger p-1 mt-2"
-            :disabled="form.directions.length === 1"
-          >
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <p v-if="errors.directions" class="text-sm text-danger">{{ errors.directions }}</p>
     </div>
 
-    <!-- Actions -->
-    <div class="flex justify-end space-x-3">
-      <button
-        type="button"
-        @click="cancel"
-        class="btn btn-secondary"
-        :disabled="loading"
-      >
-        Cancel
-      </button>
-      <button
-        type="submit"
-        class="btn btn-primary"
-        :disabled="loading"
-      >
-        <svg v-if="loading" class="animate-spin -ml-1 mr-2 h-4 w-4 text-page" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        {{ loading ? 'Saving...' : (recipe ? 'Update Recipe' : 'Create Recipe') }}
+    <div class="flex flex-col gap-2">
+      <label for="notes" class="label">Tip or notes</label>
+      <textarea
+        id="notes"
+        v-model="form.notes"
+        rows="2"
+        class="input leading-relaxed"
+        placeholder="Swaps, make-ahead tips, what you'd change next time."
+      />
+    </div>
+
+    <div class="flex items-center justify-end gap-5 border-t border-rule pt-6">
+      <button type="button" class="text-[15px] text-muted hover:text-ink" :disabled="loading" @click="cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary !px-[22px] !py-[13px] !text-[15px]" :disabled="loading">
+        {{ loading ? 'Saving…' : recipe ? 'Save changes' : 'Save to the collection' }}
       </button>
     </div>
   </form>

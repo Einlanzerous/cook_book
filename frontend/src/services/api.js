@@ -73,6 +73,12 @@ export const contributorApi = {
 export const importApi = {
   importHelloFresh(url) {
     return api.post('/import/hellofresh', { url })
+  },
+
+  // Parse a HelloFresh page without saving it (COOK-10). Resolves to the recipe
+  // in create shape; send it to recipeApi.create to confirm.
+  previewHelloFresh(url) {
+    return api.post('/import/hellofresh/preview', { url })
   }
 }
 
