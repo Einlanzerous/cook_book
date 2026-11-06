@@ -44,6 +44,20 @@ export const tagApi = {
   }
 }
 
+export const contributorApi = {
+  getAll() {
+    return api.get('/contributors')
+  },
+
+  getById(id) {
+    return api.get(`/contributors/${encodeURIComponent(id)}`)
+  },
+
+  create(contributor) {
+    return api.post('/contributors', contributor)
+  }
+}
+
 export const importApi = {
   importHelloFresh(url) {
     return api.post('/import/hellofresh', { url })

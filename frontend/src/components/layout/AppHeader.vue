@@ -17,7 +17,7 @@ let debounceTimer = null
 
 const navItems = [
   { label: 'Recipes', to: '/', match: (r) => ['home', 'recipe', 'create', 'edit'].includes(r.name) },
-  { label: 'Contributors', to: '/contributors', match: (r) => r.name === 'contributors' },
+  { label: 'Contributors', to: '/contributors', match: (r) => ['contributors', 'contributor'].includes(r.name) },
   { label: 'Connect', to: '/connect', match: (r) => r.name === 'connect' },
 ]
 
