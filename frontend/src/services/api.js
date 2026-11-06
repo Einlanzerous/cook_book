@@ -8,8 +8,10 @@ const api = axios.create({
 })
 
 export const recipeApi = {
-  getAll(tag = null) {
-    const params = tag ? { tag } : {}
+  getAll(tag = null, sort = 'createdAt') {
+    // "Recently added" order by default (COOK-6 sort=createdAt)
+    const params = { sort }
+    if (tag) params.tag = tag
     return api.get('/recipes', { params })
   },
 
