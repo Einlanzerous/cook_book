@@ -17,6 +17,9 @@ const totalTime = computed(() => {
 const displayTags = computed(() => {
   return props.recipe.tags?.slice(0, 3) || []
 })
+
+// source is stored as written ('hellofresh', 'HelloFresh', ...); compare case-insensitively
+const isHelloFresh = computed(() => (props.recipe.source || '').trim().toLowerCase() === 'hellofresh')
 </script>
 
 <template>
@@ -39,7 +42,7 @@ const displayTags = computed(() => {
       </div>
 
       <!-- Source badge -->
-      <div v-if="recipe.source === 'hellofresh'" class="absolute top-2 right-2">
+      <div v-if="isHelloFresh" class="absolute top-2 right-2">
         <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-700">
           HelloFresh
         </span>

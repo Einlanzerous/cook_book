@@ -27,6 +27,9 @@ async function deleteRecipe() {
     router.push('/')
   }
 }
+
+// source is stored as written ('hellofresh', 'HelloFresh', ...); compare case-insensitively
+const isHelloFresh = computed(() => (props.recipe.source || '').trim().toLowerCase() === 'hellofresh')
 </script>
 
 <template>
@@ -87,7 +90,7 @@ async function deleteRecipe() {
       <div class="mb-6">
         <div class="flex items-start justify-between">
           <h1 class="text-3xl font-bold text-gray-900">{{ recipe.title }}</h1>
-          <span v-if="recipe.source === 'hellofresh'" class="flex-shrink-0 ml-4 inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-green-100 text-green-700">
+          <span v-if="isHelloFresh" class="flex-shrink-0 ml-4 inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-green-100 text-green-700">
             HelloFresh
           </span>
         </div>
