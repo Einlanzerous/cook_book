@@ -106,7 +106,7 @@ function cancel() {
           type="text"
           aria-label="Recipe title"
           placeholder="Recipe title"
-          class="input !py-2 font-serif !text-[34px] leading-tight"
+          class="input !py-2 font-serif !text-[26px] leading-tight sm:!text-[34px]"
           :aria-invalid="!!errors.title"
         />
         <p v-if="errors.title" class="mt-1 text-sm text-danger">{{ errors.title }}</p>
