@@ -10,8 +10,14 @@ import RecipeDetail from './RecipeDetail.vue'
 const stubs = { 'router-link': { template: '<a><slot /></a>' } }
 const base = { id: 'r1', title: 'Bibimbap', ingredients: [], directions: [], tags: [] }
 
+// COOK-8: the card has no badge any more; it prints the API's `sourceLabel`
+// (which the backend derives case-insensitively and nulls for 'manual').
+const labelOf = (source) => {
+  const s = (source ?? '').trim()
+  return !s || s.toLowerCase() === 'manual' ? null : s.toLowerCase() === 'hellofresh' ? 'HelloFresh' : s
+}
 const card = (source) =>
-  mount(RecipeCard, { props: { recipe: { ...base, source } }, global: { stubs } })
+  mount(RecipeCard, { props: { recipe: { ...base, source, sourceLabel: labelOf(source) } }, global: { stubs } })
 const detail = (source) =>
   mount(RecipeDetail, { props: { recipe: { ...base, source } }, global: { stubs, plugins: [createPinia()] } })
 
