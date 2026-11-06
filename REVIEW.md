@@ -27,10 +27,12 @@ check says little about behaviour. A green check on a docs-only PR means nothing
 1. **Migrations** (`backend/prisma/migrations/`): additive and idempotent in
    effect; new NOT NULL columns have defaults or a backfill; foreign keys have an
    explicit ON DELETE; the previous released image must still run against the
-   new schema (rollback story — see `docs/runbook.md`).
-2. **API shape**: changes to a response must stay compatible with the shared
-   recipe presenter and the example fixture; partial `PUT` must not blank
-   omitted fields.
+   new schema. State the rollback in the PR body (and in `docs/runbook.md` once
+   COOK-6 adds it).
+2. **API shape**: response changes must stay compatible with the frontend
+   client in `frontend/src/services/` (and, once COOK-6 lands, the shared recipe
+   presenter and its example fixture); a partial `PUT` must not blank omitted
+   fields.
 3. **Server-side input handling**: URL imports validate the hostname, not a
    substring; no DB or network access in preview paths.
 4. **Conventional commits**: release-please derives the version from the PR
@@ -58,7 +60,8 @@ reviewed.
 1. **What the pass verifies against this tree.** Cited paths, symbols and line
    numbers exist; ruling premises hold against `backend/prisma/schema.prisma`
    and the migrations; claimed current behaviour matches the routes/services
-   named; criteria are checkable by `make test` or a named command. Anything
+   named; criteria are checkable by a named command (`make test` only once COOK-5
+   has landed; until then a criterion citing it has no command behind it). Anything
    it cannot check from the checkout is *unverified*, never *false*.
 2. **Standing.** Advisory threads on a passing check; blocking only for a hole a
    person would bounce (data loss, un-rollbackable migration, a criterion no
