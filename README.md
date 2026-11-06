@@ -74,6 +74,10 @@ The app will be available at http://localhost:5173
 | `make dev` | Start both backend and frontend servers |
 | `make dev-backend` | Start only the backend server |
 | `make dev-frontend` | Start only the frontend server |
+| `make db-migrate` | Apply pending migrations (`prisma migrate deploy`) |
+| `make db-migrate-new NAME=x` | Create a new migration file to hand-edit |
+| `make db-seed-force` | Wipe and reseed a development database |
+| `make test` / `make test-db` | Run tests (`test-db` uses a throwaway Postgres in Docker) |
 | `make db-reset` | Reset database (drop and recreate) |
 | `make db-studio` | Open Prisma Studio GUI |
 | `make build` | Build frontend for production |
@@ -117,15 +121,17 @@ The app will be available at http://localhost:5173
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /api/recipes | List all recipes (optional `?tag=` filter) |
+| GET | /api/recipes | List all recipes (optional `?tag=` filter, `?sort=createdAt`; default order is last updated) |
 | GET | /api/recipes/:id | Get single recipe |
 | POST | /api/recipes | Create recipe |
-| PUT | /api/recipes/:id | Update recipe |
+| PUT | /api/recipes/:id | Partial update: omitted fields, ingredients, directions and tags are unchanged |
 | DELETE | /api/recipes/:id | Delete recipe |
 | GET | /api/tags | List all tags with recipe counts |
 | GET | /api/tags/:name/recipes | Get recipes by tag |
 | GET | /api/search?q= | Search recipes |
 | POST | /api/import/hellofresh | Import from HelloFresh URL |
+
+Migrations, the deploy/rollback procedure and the database runbook are in [docs/runbook.md](docs/runbook.md).
 
 ## Project Structure
 
