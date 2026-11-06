@@ -11,9 +11,10 @@ test — it stops prod booting, or changes data nobody can recover. Attention
 goes there first.
 
 ### What CI proves
-`ci.yml` builds, runs the Vitest suites (backend against a throwaway Postgres 16
-service, frontend under jsdom) and builds the frontend. Assume that passed; do
-not re-derive that it compiles. A green check on a docs-only PR means nothing.
+`ci.yml` builds the frontend and image. Once the COOK-5 harness lands it also
+runs the Vitest suites (backend against a Postgres 16 service, frontend under
+jsdom) in a `test` job; until then the repo has no automated tests, so a green
+check says little about behaviour. A green check on a docs-only PR means nothing.
 
 ## Severity
 - **Blocking:** data loss, a migration that is not additive/expand-only without
