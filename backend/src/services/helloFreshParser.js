@@ -60,6 +60,7 @@ function parseJsonLd(data) {
   let prepTime = null;
   let cookTime = null;
   let totalTime = null;
+  let timeSplitEstimated = false;
 
   if (data.prepTime) {
     prepTime = parseDuration(data.prepTime);
@@ -69,18 +70,24 @@ function parseJsonLd(data) {
   }
   if (data.totalTime) {
     totalTime = parseDuration(data.totalTime);
-    // If we only have totalTime, estimate prep as 1/3 and cook as 2/3
+    // If we only have totalTime, estimate prep as 1/3 and cook as 2/3. The split
+    // is a guess, so it is flagged (timeSplitEstimated) for consumers.
     if (!prepTime && !cookTime && totalTime) {
       prepTime = Math.round(totalTime / 3);
       cookTime = totalTime - prepTime;
+      timeSplitEstimated = true;
     }
   }
 
-  // Calculate total time for tag generation
-  const calculatedTotalTime = totalTime || (prepTime || 0) + (cookTime || 0);
+  // Stored total: the page's own total when given, else prep + cook.
+  const totalMinutes = totalTime || (prepTime || 0) + (cookTime || 0) || null;
 
-  // Generate tags based on content
-  const tags = generateTags(data.name, ingredients, data.recipeCuisine, data.recipeCategory, calculatedTotalTime);
+  // Category and cuisine are columns, not tags (COOK-6).
+  const category = firstText(data.recipeCategory);
+  let cuisine = firstText(data.recipeCuisine);
+
+  const detected = detectTags(data.name, ingredients);
+  if (!cuisine) cuisine = detected.cuisine;
 
   return {
     title: data.name || 'Imported Recipe',
@@ -89,9 +96,14 @@ function parseJsonLd(data) {
     servings: parseInt(data.recipeYield) || 2,
     prepTime,
     cookTime,
+    totalMinutes,
+    timeSplitEstimated,
+    category,
+    cuisine,
+    vegetarian: detected.vegetarian,
     ingredients,
     directions,
-    tags
+    tags: detected.tags
   };
 }
 
@@ -117,7 +129,7 @@ function parseHtml($) {
     }
   });
 
-  const tags = generateTags(title, ingredients, null, null, null);
+  const detected = detectTags(title, ingredients);
 
   return {
     title,
@@ -126,9 +138,14 @@ function parseHtml($) {
     servings: 2,
     prepTime: null,
     cookTime: null,
+    totalMinutes: null,
+    timeSplitEstimated: false,
+    category: null,
+    cuisine: detected.cuisine,
+    vegetarian: detected.vegetarian,
     ingredients,
     directions,
-    tags
+    tags: detected.tags
   };
 }
 
@@ -203,40 +220,24 @@ function toTitleCase(str) {
     .join(' ');
 }
 
-// Get time-based tag
-function getTimeTag(totalMinutes) {
-  if (!totalMinutes || totalMinutes <= 0) return null;
-  if (totalMinutes <= 15) return '15 Minutes';
-  if (totalMinutes <= 30) return '30 Minutes';
-  if (totalMinutes <= 45) return '45 Minutes';
-  if (totalMinutes <= 60) return '1 Hour';
-  return '1 Hour+';
+/** First non-empty string of a schema.org string-or-array field, Title-Cased. */
+function firstText(value) {
+  const first = Array.isArray(value) ? value.find((v) => typeof v === 'string' && v.trim()) : value;
+  return typeof first === 'string' && first.trim() ? toTitleCase(first.trim()) : null;
 }
 
-function generateTags(title, ingredients, cuisine, category, totalTime = null) {
+/**
+ * Tags from the title and ingredients, plus the facts that are columns.
+ * Time-bucket, cuisine, category and 'Vegetarian' tags are no longer emitted
+ * (COOK-6): total time, category, cuisine and vegetarian are columns. Protein
+ * and dish-type tags stay. The old 'Mexican' / 'Asian' style tags are cuisines,
+ * so they come back as `cuisine`, not as tags.
+ */
+function detectTags(title, ingredients) {
   const tags = new Set();
   const titleLower = (title || '').toLowerCase();
   const ingredientNames = ingredients.map(i => i.name.toLowerCase()).join(' ');
-
-  // Time-based tag
-  const timeTag = getTimeTag(totalTime);
-  if (timeTag) {
-    tags.add(timeTag);
-  }
-
-  // Cuisine tags
-  if (cuisine) {
-    tags.add(toTitleCase(cuisine));
-  }
-
-  // Category tags
-  if (category) {
-    if (Array.isArray(category)) {
-      category.forEach(c => tags.add(toTitleCase(c)));
-    } else {
-      tags.add(toTitleCase(category));
-    }
-  }
+  let cuisine = null;
 
   // Protein detection
   if (titleLower.includes('chicken') || ingredientNames.includes('chicken')) {
@@ -253,10 +254,7 @@ function generateTags(title, ingredients, cuisine, category, totalTime = null) {
     tags.add('Seafood');
   }
 
-  // Style detection
-  if (titleLower.includes('vegetarian') || titleLower.includes('veggie')) {
-    tags.add('Vegetarian');
-  }
+  // Dish-type detection
   if (titleLower.includes('bowl')) {
     tags.add('Bowl');
   }
@@ -266,12 +264,16 @@ function generateTags(title, ingredients, cuisine, category, totalTime = null) {
   if (titleLower.includes('pasta') || titleLower.includes('spaghetti')) {
     tags.add('Pasta');
   }
+
+  // Style detection that is really cuisine
   if (titleLower.includes('taco') || titleLower.includes('burrito')) {
-    tags.add('Mexican');
+    cuisine = 'Mexican';
   }
   if (titleLower.includes('stir fry') || titleLower.includes('teriyaki') || titleLower.includes('asian')) {
-    tags.add('Asian');
+    cuisine = cuisine || 'Asian';
   }
 
-  return Array.from(tags).slice(0, 6); // Limit to 6 tags (increased to accommodate time tag)
+  const vegetarian = titleLower.includes('vegetarian') || titleLower.includes('veggie');
+
+  return { tags: Array.from(tags), cuisine, vegetarian };
 }

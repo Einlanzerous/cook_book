@@ -1,0 +1,50 @@
+{
+  "id": "6f1d6a5e-2b0f-4d0a-9d7e-3c2b1a0f9e88",
+  "title": "Beef & Zucchini Bibimbap",
+  "description": "Named for the Korean word for mixing rice.",
+  "imageUrl": "https://example.com/bibimbap.jpg",
+  "servings": 2,
+  "prepTime": 10,
+  "cookTime": 20,
+  "totalMinutes": 30,
+  "timeSplitEstimated": false,
+  "source": "HelloFresh",
+  "sourceLabel": "HelloFresh",
+  "sourceUrl": "https://www.hellofresh.com/recipes/example",
+  "category": "Main Course",
+  "cuisine": "Korean",
+  "vegetarian": false,
+  "notes": "Swap in chicken for beef.",
+  "contributorId": "0b6c0a3e-52a1-4f43-8a4f-0a8d2e7c91aa",
+  "contributor": {
+    "id": "0b6c0a3e-52a1-4f43-8a4f-0a8d2e7c91aa",
+    "name": "magos",
+    "bio": null,
+    "portraitUrl": null,
+    "joinedAt": "2026-01-05T10:00:00.000Z"
+  },
+  "createdAt": "2026-03-12T09:30:00.000Z",
+  "updatedAt": "2026-03-12T09:30:00.000Z",
+  "ingredients": [
+    {
+      "id": "a1",
+      "name": "Jasmine rice",
+      "amount": "3/4",
+      "unit": "cup",
+      "quantity": 0.75,
+      "recipeId": "6f1d6a5e-2b0f-4d0a-9d7e-3c2b1a0f9e88"
+    }
+  ],
+  "directions": [
+    {
+      "id": "d1",
+      "stepNumber": 1,
+      "heading": "Cook the rice",
+      "instruction": "In a small pot, combine rice, water and a pinch of salt.",
+      "recipeId": "6f1d6a5e-2b0f-4d0a-9d7e-3c2b1a0f9e88"
+    }
+  ],
+  "tags": [
+    { "id": "t1", "name": "Beef" }
+  ]
+}

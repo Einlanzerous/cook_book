@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import recipesRouter from './routes/recipes.js';
 import tagsRouter from './routes/tags.js';
 import importRouter from './routes/import.js';
+import { recipeInclude, presentRecipe } from './services/recipeShape.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { resolveBuildIdentity } from './buildIdentity.js';
 
@@ -55,15 +56,11 @@ export function createApp({ prisma }) {
             { tags: { some: { name: { contains: searchTerm, mode: 'insensitive' } } } }
           ]
         },
-        include: {
-          ingredients: true,
-          directions: { orderBy: { stepNumber: 'asc' } },
-          tags: true
-        },
+        include: recipeInclude,
         orderBy: { updatedAt: 'desc' }
       });
 
-      res.json(recipes);
+      res.json(recipes.map(presentRecipe));
     } catch (error) {
       next(error);
     }
