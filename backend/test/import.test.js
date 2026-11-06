@@ -137,5 +137,15 @@ describeDb('POST /api/import/hellofresh (criterion 7)', () => {
   it('rejects non-HelloFresh urls and a missing url', async () => {
     await request(app).post('/api/import/hellofresh').send({}).expect(400);
     await request(app).post('/api/import/hellofresh').send({ url: 'https://example.com/x' }).expect(400);
+    // Hostname is checked, not a substring: these all contain 'hellofresh.com'.
+    for (const bad of [
+      'http://169.254.169.254/latest/meta-data/?x=hellofresh.com',
+      'https://hellofresh.com.attacker.example/recipes/x',
+      'https://nothellofresh.com/recipes/x',
+      'file:///etc/passwd#hellofresh.com',
+      { toString: () => 'https://www.hellofresh.com/x' },
+    ]) {
+      await request(app).post('/api/import/hellofresh').send({ url: bad }).expect(400);
+    }
   });
 });

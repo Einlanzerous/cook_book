@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { parseHelloFreshUrl } from '../services/helloFreshParser.js';
+import { isHelloFreshUrl } from './importPreview.js';
 import { recipeInclude, presentRecipe } from '../services/recipeShape.js';
 import { prepareIngredients, prepareDirections, resolveContributorId, tagConnect } from '../services/recipeWrite.js';
 
@@ -14,7 +15,7 @@ router.post('/hellofresh', async (req, res, next) => {
       return res.status(400).json({ error: 'URL is required' });
     }
 
-    if (!url.includes('hellofresh.com')) {
+    if (typeof url !== 'string' || !isHelloFreshUrl(url)) {
       return res.status(400).json({ error: 'URL must be from hellofresh.com' });
     }
 
