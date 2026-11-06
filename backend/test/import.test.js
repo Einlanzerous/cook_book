@@ -107,6 +107,25 @@ describeDb('POST /api/import/hellofresh (criterion 7)', () => {
     expect(salt.quantity).toBeNull();
   });
 
+  it('COOK-27: prod-pattern page stores corrected amount/unit/name/quantity and clean directions', async () => {
+    serve(fs.readFileSync(new URL('./fixtures/hellofresh-prod-patterns.html', import.meta.url), 'utf8'));
+    const r = (await request(app).post('/api/import/hellofresh').send({ url: URL_ }).expect(201)).body;
+    const by = (n) => r.ingredients.find((i) => i.name === n);
+    expect(by('Israeli Couscous')).toMatchObject({ amount: '1/2', unit: 'cup', quantity: 0.5 });
+    expect(by('Jasmine Rice')).toMatchObject({ amount: '3/4', unit: 'cup', quantity: 0.75 });
+    expect(by('Tomato Paste')).toMatchObject({ amount: '1.5', unit: 'ounce', quantity: 1.5 });
+    expect(by('Ground Beef')).toMatchObject({ amount: '10', unit: 'ounce', quantity: 10 });
+    expect(by('Ginger')).toMatchObject({ amount: '1', unit: 'thumb', quantity: 1 });
+    expect(by('Cumin')).toMatchObject({ amount: null, unit: 'teaspoon', quantity: null });
+    expect(by('Lemon')).toMatchObject({ amount: '2', unit: null, quantity: 2 });
+    expect(by('Soy Sauce')).toMatchObject({ amount: '1 1/2', quantity: 1.5 });
+    expect(by('Garlic')).toMatchObject({ amount: '2-3', quantity: null });
+    expect(by('Salt')).toMatchObject({ amount: null, unit: null, quantity: null });
+    expect(r.ingredients.some((i) => /^[/.\d]/.test(i.name))).toBe(false);
+    expect(r.directions).toHaveLength(3);
+    expect(r.directions.map((d) => d.instruction).join('')).not.toMatch(/[•\n]/);
+  });
+
   it('a veggie title sets vegetarian', async () => {
     serve(ldPage({ name: 'Veggie Burrito Bowl', totalTime: 'PT25M', recipeIngredient: ['1 cup Rice'], recipeInstructions: ['Cook.'] }));
     const r = (await request(app).post('/api/import/hellofresh').send({ url: URL_ }).expect(201)).body;
