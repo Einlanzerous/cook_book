@@ -3,36 +3,37 @@ defineProps({
   directions: {
     type: Array,
     default: () => []
+  },
+  // Recipe `notes`, shown as an italic tip under the steps.
+  tip: {
+    type: String,
+    default: null
   }
 })
 </script>
 
 <template>
-  <div>
-    <h2 class="text-lg font-semibold text-ink mb-4 flex items-center">
-      <svg class="h-5 w-5 mr-2 text-fir" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-      </svg>
-      Directions
-    </h2>
+  <section class="flex flex-col gap-2">
+    <h2 class="mb-3 font-serif text-[26px] font-medium">Method</h2>
 
-    <ol class="space-y-4">
+    <ol v-if="directions.length" class="flex flex-col gap-1.5">
       <li
-        v-for="direction in directions"
+        v-for="(direction, i) in directions"
         :key="direction.id"
-        class="flex"
+        :class="[
+          'grid grid-cols-[28px_1fr] gap-3 rounded p-4 sm:grid-cols-[40px_1fr] sm:gap-4 sm:p-5',
+          i % 2 ? 'bg-fir/[0.06]' : 'bg-amber-tint'
+        ]"
       >
-        <span class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-fir-tint text-fir font-semibold rounded-full mr-4 mt-0.5">
-          {{ direction.stepNumber }}
-        </span>
-        <p class="text-ink-soft leading-relaxed pt-1">
-          {{ direction.instruction }}
-        </p>
+        <span class="font-serif text-[32px] leading-none text-fir" data-test="numeral">{{ direction.stepNumber }}</span>
+        <div class="flex flex-col gap-1.5">
+          <span v-if="direction.heading" class="text-[15px] font-semibold" data-test="heading">{{ direction.heading }}</span>
+          <p class="text-base leading-[1.65] text-ink-soft" data-test="body">{{ direction.instruction }}</p>
+        </div>
       </li>
     </ol>
+    <p v-else class="italic text-muted">No directions listed.</p>
 
-    <p v-if="!directions.length" class="text-muted italic">
-      No directions listed.
-    </p>
-  </div>
+    <p v-if="tip" class="mt-3 pl-5 pt-2 font-serif text-[17px] italic text-ink-soft sm:pl-[76px]" data-test="tip">{{ tip }}</p>
+  </section>
 </template>

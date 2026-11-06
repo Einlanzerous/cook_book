@@ -34,6 +34,7 @@ export default {
         b: '#E6E0CE',
       },
       codebg: '#1F2A23',        // dark code block
+      'amber-tint': 'rgba(150,110,60,0.08)', // canvas: odd method-step wash (even steps use fir at 6%)
       // Not in the canvas; semantic additions for existing destructive/status UI.
       danger: { DEFAULT: '#9B2C2C', tint: '#F6E7E2' },
       ok: '#3E7A57',
