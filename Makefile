@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-frontend test-db all check install setup db-create db-migrate db-seed db-reset db-studio dev dev-backend dev-frontend build build-frontend clean clean-db help
+.PHONY: test test-backend test-frontend test-db all check install setup db-create db-migrate db-migrate-new db-seed db-seed-force db-reset db-studio dev dev-backend dev-frontend build build-frontend clean clean-db help
 
 # Default target
 all: check install setup
@@ -85,15 +85,30 @@ db-create:
 		$(PSQL_CONN) -c "CREATE DATABASE $(DB_NAME)"
 	@echo "$(GREEN)✓ Database $(DB_NAME) ready$(NC)"
 
+# Apply pending migrations (what the container entrypoint does on start).
 db-migrate:
-	@echo "Running database migrations..."
-	@cd backend && DATABASE_URL="$(DATABASE_URL)" npx prisma migrate dev --name init --skip-seed
+	@echo "Applying pending database migrations..."
+	@cd backend && DATABASE_URL="$(DATABASE_URL)" npx prisma migrate deploy
 	@echo "$(GREEN)✓ Migrations complete$(NC)"
+
+# Start a new migration: writes the SQL file only, never applies it, so you can
+# hand-edit it (backfills, expression indexes). See docs/runbook.md.
+#   make db-migrate-new NAME=add_thing
+db-migrate-new:
+	@test -n "$(NAME)" || { echo "$(RED)usage: make db-migrate-new NAME=<snake_case_name>$(NC)"; exit 1; }
+	@cd backend && DATABASE_URL="$(DATABASE_URL)" npx prisma migrate dev --create-only --name $(NAME)
 
 db-seed:
 	@echo "Seeding database with sample recipes..."
 	@cd backend && DATABASE_URL="$(DATABASE_URL)" npx prisma db seed
 	@echo "$(GREEN)✓ Database seeded$(NC)"
+
+# Wipe recipes, tags and contributors, then reseed. Development databases only:
+# seed.js still refuses under NODE_ENV=production even with --force.
+db-seed-force:
+	@echo "$(YELLOW)Re-seeding (deletes all recipes, tags and contributors)...$(NC)"
+	@cd backend && DATABASE_URL="$(DATABASE_URL)" node prisma/seed.js --force
+	@echo "$(GREEN)✓ Database re-seeded$(NC)"
 
 db-reset:
 	@echo "$(YELLOW)Resetting database...$(NC)"
@@ -204,8 +219,10 @@ help:
 	@echo ""
 	@echo "$(GREEN)Database:$(NC)"
 	@echo "  make db-create    - Create the PostgreSQL database"
-	@echo "  make db-migrate   - Run Prisma migrations"
-	@echo "  make db-seed      - Seed database with sample recipes"
+	@echo "  make db-migrate   - Apply pending Prisma migrations (migrate deploy)"
+	@echo "  make db-migrate-new NAME=x - Create a new migration file to hand-edit (--create-only)"
+	@echo "  make db-seed      - Seed an empty database with sample recipes (refuses otherwise)"
+	@echo "  make db-seed-force - Wipe and reseed a development database"
 	@echo "  make db-reset     - Reset database (drop and recreate)"
 	@echo "  make db-studio    - Open Prisma Studio GUI"
 	@echo ""
