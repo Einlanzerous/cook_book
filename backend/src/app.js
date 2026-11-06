@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import recipesRouter from './routes/recipes.js';
 import tagsRouter from './routes/tags.js';
 import importRouter from './routes/import.js';
+import contributorsRouter from './routes/contributors.js';
 import { recipeInclude, presentRecipe } from './services/recipeShape.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { resolveBuildIdentity } from './buildIdentity.js';
@@ -35,6 +36,7 @@ export function createApp({ prisma }) {
   app.use('/api/recipes', recipesRouter);
   app.use('/api/tags', tagsRouter);
   app.use('/api/import', importRouter);
+  app.use('/api/contributors', contributorsRouter);
 
   // Search endpoint
   app.get('/api/search', async (req, res, next) => {
