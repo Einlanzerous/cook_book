@@ -20,8 +20,12 @@ const routes = [
   {
     path: '/contributors',
     name: 'contributors',
-    component: () => import('../views/PlaceholderView.vue'),
-    props: { eyebrow: 'Contributors', title: 'The cooks behind the book.' }
+    component: () => import('../views/ContributorsView.vue')
+  },
+  {
+    path: '/contributors/:id',
+    name: 'contributor',
+    component: () => import('../views/ContributorView.vue')
   },
   {
     path: '/connect',
