@@ -18,6 +18,18 @@ const routes = [
     component: () => import('../views/CreateRecipeView.vue')
   },
   {
+    path: '/contributors',
+    name: 'contributors',
+    component: () => import('../views/PlaceholderView.vue'),
+    props: { eyebrow: 'Contributors', title: 'The cooks behind the book.' }
+  },
+  {
+    path: '/connect',
+    name: 'connect',
+    component: () => import('../views/PlaceholderView.vue'),
+    props: { eyebrow: 'Connect · MCP', title: 'Let your agent cook from the book.' }
+  },
+  {
     path: '/edit/:id',
     name: 'edit',
     component: () => import('../views/EditRecipeView.vue')
