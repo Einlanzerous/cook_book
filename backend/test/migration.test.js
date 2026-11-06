@@ -174,6 +174,19 @@ describeDb('migration on the synthetic pre-migration fixture', () => {
     expect((await db.client.query('SELECT count(*)::int AS n FROM "Ingredient" WHERE quantity IS NOT NULL')).rows[0].n).toBe(0);
   });
 
+  it('the previous app can still insert: a row naming only the init columns gets defaults (criterion 9)', async () => {
+    // exactly the column list the 1.2.0 image writes
+    await db.client.query(`INSERT INTO "Recipe" ("id","title","source","createdAt","updatedAt")
+      VALUES ('old-writer','Written by 1.2.0','hellofresh', now() AT TIME ZONE 'UTC', now() AT TIME ZONE 'UTC')`);
+    await db.client.query(`INSERT INTO "Ingredient" ("id","name","recipeId") VALUES ('old-ing','x','old-writer')`);
+    await db.client.query(`INSERT INTO "Direction" ("id","stepNumber","instruction","recipeId") VALUES ('old-dir',1,'y','old-writer')`);
+    const { rows } = await db.client.query(`SELECT source, vegetarian, "timeSplitEstimated", "contributorId", "totalMinutes" FROM "Recipe" WHERE id = 'old-writer'`);
+    expect(rows[0]).toEqual({ source: 'hellofresh', vegetarian: false, timeSplitEstimated: false, contributorId: null, totalMinutes: null });
+    // and pre-existing rows still read the unchanged source the old badge check relies on
+    const hf = await db.client.query(`SELECT source FROM "Recipe" WHERE id = 'r-hf-lower'`);
+    expect(hf.rows[0].source).toBe('hellofresh');
+  });
+
   it('creates the expression and column indexes (criterion 5)', async () => {
     const { rows } = await db.client.query(`SELECT indexname, indexdef FROM pg_indexes WHERE tablename IN ('Recipe','Contributor')`);
     const defs = rows.map((r) => r.indexdef).join('\n');
