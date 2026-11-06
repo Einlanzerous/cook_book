@@ -1,4 +1,4 @@
-.PHONY: all check install setup db-create db-migrate db-seed db-reset db-studio dev dev-backend dev-frontend build build-frontend clean clean-db help
+.PHONY: test test-backend test-frontend test-db all check install setup db-create db-migrate db-seed db-reset db-studio dev dev-backend dev-frontend build build-frontend clean clean-db help
 
 # Default target
 all: check install setup
@@ -133,6 +133,43 @@ build-frontend:
 	@cd frontend && npm run build
 
 #---------------------------------------------------------------------------
+# Tests
+#---------------------------------------------------------------------------
+
+# Plain `make test` needs no database: DB-backed backend tests are skipped
+# unless COOK_TEST_DATABASE_URL is set (its database name must end in _test).
+# CI sets COOK_REQUIRE_DB=1 so a skip there is a failure.
+test: test-backend test-frontend
+
+test-backend:
+	@cd backend && npm test
+
+test-frontend:
+	@cd frontend && npm test
+
+# Run the full suite against a throwaway Postgres 16 on loopback. Port is
+# overridable; 5432/5433/55434/55524/55526 are taken on the Construct box.
+# NEVER point COOK_TEST_DATABASE_URL at a real database: the tests create and
+# drop databases (the suite refuses any name not ending in _test).
+TEST_PG_PORT      ?= 55540
+TEST_PG_CONTAINER ?= cook-book-test-pg
+test-db:
+	@docker rm -f $(TEST_PG_CONTAINER) >/dev/null 2>&1 || true
+	@docker run -d --name $(TEST_PG_CONTAINER) \
+		-e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=cook_book_test \
+		-p 127.0.0.1:$(TEST_PG_PORT):5432 postgres:16-alpine >/dev/null
+	@echo "waiting for postgres..."
+	@ready=0; for i in $$(seq 1 30); do \
+		if docker exec $(TEST_PG_CONTAINER) pg_isready -U postgres -d cook_book_test >/dev/null 2>&1; then ready=1; break; fi; \
+		sleep 1; \
+	done; \
+	if [ $$ready -ne 1 ]; then echo "postgres did not become ready"; docker rm -f $(TEST_PG_CONTAINER) >/dev/null 2>&1; exit 1; fi; \
+	sleep 1; \
+	COOK_REQUIRE_DB=1 COOK_TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:$(TEST_PG_PORT)/cook_book_test" \
+		$(MAKE) test ; rc=$$? ; \
+	docker rm -f $(TEST_PG_CONTAINER) >/dev/null 2>&1 ; exit $$rc
+
+#---------------------------------------------------------------------------
 # Cleanup
 #---------------------------------------------------------------------------
 
@@ -174,6 +211,10 @@ help:
 	@echo ""
 	@echo "$(GREEN)Build:$(NC)"
 	@echo "  make build        - Build frontend for production"
+	@echo ""
+	@echo "$(GREEN)Test:$(NC)"
+	@echo "  make test         - Run backend and frontend tests (DB tests skipped)"
+	@echo "  make test-db      - Same, with a throwaway Postgres in Docker (port TEST_PG_PORT=$(TEST_PG_PORT))"
 	@echo ""
 	@echo "$(GREEN)Cleanup:$(NC)"
 	@echo "  make clean        - Remove node_modules and build artifacts"
