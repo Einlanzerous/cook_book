@@ -21,6 +21,10 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          # With `release-type` set here, release-please-action@v4 builds its
+          # manifest from these inputs and never reads release-please-config.json,
+          # so options in that file (release-as, bump-*) have no effect. To force a
+          # version, put a `Release-As: x.y.z` footer on a commit to main.
           release-type: node
 
   build-and-push:
