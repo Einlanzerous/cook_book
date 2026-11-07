@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.0](https://github.com/Einlanzerous/cook_book/compare/v1.2.1...v2.0.0) (2026-11-07)
+
+
+### Features
+
+* **ui:** rebuild the app to the Commonplace design (COOK-1) ([#10](https://github.com/Einlanzerous/cook_book/issues/10)) ([92ebbe4](https://github.com/Einlanzerous/cook_book/commit/92ebbe4167366bf544c454c6e4671a0fe6c95303))
+
+
+### Miscellaneous Chores
+
+* release 2.0.0 ([bf31366](https://github.com/Einlanzerous/cook_book/commit/bf31366ffa9862a78267831a5184c07905d1cff1))
+
 ## [1.2.1](https://github.com/Einlanzerous/cook_book/compare/v1.2.0...v1.2.1) (2026-09-11)
 
 
