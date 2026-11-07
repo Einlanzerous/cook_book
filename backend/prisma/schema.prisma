@@ -45,6 +45,21 @@ model Contributor {
   externalId  String?  @unique
   joinedAt    DateTime @default(now()) @db.Timestamptz(3)
   recipes     Recipe[]
+  sessions    Session[]
+}
+
+// COOK-23: a signed-in browser. `id` is the sha256 hex of the cookie token (the
+// token itself is never stored). Fixed life from mint; revoke by setting revokedAt.
+model Session {
+  id            String      @id
+  contributorId String
+  contributor   Contributor @relation(fields: [contributorId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+  expiresAt     DateTime    @db.Timestamptz(3)
+  revokedAt     DateTime?   @db.Timestamptz(3)
+
+  @@index([contributorId])
+  @@index([expiresAt])
 }
 
 model Ingredient {

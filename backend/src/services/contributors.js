@@ -7,7 +7,6 @@
  * exclude 'manual' (no label) and blank. email / externalId are never exposed.
  */
 import { recipeInclude, presentRecipe, sourceLabel } from './recipeShape.js';
-import { HttpError } from './recipeWrite.js';
 
 export const sourceKey = (source) => (source ?? '').trim().toLowerCase();
 
@@ -78,29 +77,4 @@ export async function getContributorProfile(prisma, id) {
     sources,
     recipes: recipes.map(presentRecipe)
   };
-}
-
-const optionalText = (body, field) => {
-  const v = body[field];
-  if (v === undefined || v === null) return null;
-  if (typeof v !== 'string') throw new HttpError(400, `${field} must be a string`);
-  return v.trim() || null;
-};
-
-export async function createContributor(prisma, body) {
-  body = body ?? {};
-  if (typeof body.name !== 'string' || !body.name.trim()) {
-    throw new HttpError(400, 'name is required');
-  }
-  const created = await prisma.contributor.create({
-    data: {
-      name: body.name.trim(),
-      bio: optionalText(body, 'bio'),
-      portraitUrl: optionalText(body, 'portraitUrl')
-      // email and externalId are deliberately NOT accepted here: they are the
-      // keys COOK-23's first-sign-in creation binds an identity to, and this
-      // route is open. A caller who could set them could pre-claim a sign-in.
-    }
-  });
-  return presentContributor(created);
 }

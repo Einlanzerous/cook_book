@@ -10,14 +10,25 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 vi.mock('axios', () => ({ default: { get: vi.fn() } }));
 import axios from 'axios';
 import { createApp } from '../src/app.js';
+import { createAuthKit } from './helpers/auth.js';
 import { isHelloFreshUrl } from '../src/routes/importPreview.js';
 
 const html = fs.readFileSync(new URL('./fixtures/hellofresh-recipe.html', import.meta.url), 'utf8');
 const URL_ = 'https://www.hellofresh.com/recipes/synthetic-bibimbap';
 
-const prisma = new Proxy({}, { get: () => { throw new Error('preview must not touch the database'); } });
-const app = createApp({ prisma });
-const post = (body) => request(app).post('/api/import/hellofresh/preview').send(body);
+// The preview itself never touches the database; only the session lookup does,
+// and it is served from this stub of one live session.
+const live = { contributor: { id: 'c1', name: 'Tester' }, revokedAt: null, expiresAt: new Date(Date.now() + 1e9) };
+const prisma = new Proxy({}, {
+  get: (_, prop) => {
+    if (prop === 'session') return { findUnique: async () => live };
+    throw new Error('preview must not touch the database');
+  }
+});
+const kit = await createAuthKit();
+const app = createApp({ prisma, config: kit.config, verifyAccess: kit.verifyAccess, log: () => {} });
+const cookie = `${kit.config.cookieName}=anything`;
+const post = (body) => request(app).post('/api/import/hellofresh/preview').set('Cookie', cookie).send(body);
 
 describe('POST /api/import/hellofresh/preview', () => {
   beforeEach(() => { axios.get.mockReset(); });
@@ -54,18 +65,33 @@ describe('POST /api/import/hellofresh/preview', () => {
     expect(axios.get).not.toHaveBeenCalled();
   });
 
-  it('turns a failed fetch into a 400 with the message', async () => {
-    axios.get.mockImplementation(() => Promise.reject(new Error('getaddrinfo ENOTFOUND')));
+  it('requires a session (stated default D1)', async () => {
+    const res = await request(app).post('/api/import/hellofresh/preview').send({ url: URL_ });
+    expect(res.status).toBe(401);
+    expect(axios.get).not.toHaveBeenCalled();
+  });
+
+  it('turns a failed fetch into a 400 with a FIXED message, never the raw error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    axios.get.mockImplementation(() => Promise.reject(new Error('getaddrinfo ENOTFOUND internal.example')));
     const res = await post({ url: URL_ });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/Failed to fetch recipe/);
+    expect(res.body.error).toBe('Could not fetch or read that recipe page.');
+    expect(JSON.stringify(res.body)).not.toMatch(/getaddrinfo|ENOTFOUND|internal/);
+    vi.restoreAllMocks();
+  });
+
+  it('refuses an http: URL without fetching', async () => {
+    const res = await post({ url: 'http://www.hellofresh.com/recipes/x' });
+    expect(res.status).toBe(400);
+    expect(axios.get).not.toHaveBeenCalled();
   });
 });
 
 describe('isHelloFreshUrl', () => {
   it('accepts hellofresh.com and subdomains only', () => {
     expect(isHelloFreshUrl('https://www.hellofresh.com/recipes/x')).toBe(true);
-    expect(isHelloFreshUrl('http://hellofresh.com/x')).toBe(true);
+    expect(isHelloFreshUrl('http://hellofresh.com/x')).toBe(false); // https only (COOK-23)
     expect(isHelloFreshUrl('https://nothellofresh.com/x')).toBe(false);
   });
 });

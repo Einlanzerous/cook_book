@@ -7,7 +7,7 @@ import express from 'express';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { describeDb, createScratchDb } from './helpers/db.js';
-import { createApp } from '../src/app.js';
+import { createTestApp, authed } from './helpers/auth.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 
 const exampleFixture = JSON.parse(
@@ -17,12 +17,19 @@ const exampleFixture = JSON.parse(
 describeDb('recipes API', () => {
   let db;
   let app;
+  let t;
+  let cookie;
   let magosId;
+  const me = () => authed(app, cookie);
 
   beforeAll(async () => {
     db = await createScratchDb();
-    app = createApp({ prisma: db.prisma });
-    magosId = (await db.prisma.contributor.findFirst({ where: { name: 'magos' } })).id;
+    t = await createTestApp(db.prisma);
+    app = t.app;
+    // Sign in as the legacy owner: bind the email, then first sign-in binds the sub.
+    const magos = await db.prisma.contributor.findFirst({ where: { name: 'magos' } }).then((m) => db.prisma.contributor.update({ where: { id: m.id }, data: { email: 'magos@example.com' } }));
+    magosId = magos.id;
+    cookie = await t.signIn('magos@example.com');
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
   afterAll(async () => {
@@ -63,7 +70,7 @@ describeDb('recipes API', () => {
   // ---- criterion 5: shape ----
   describe('shape and compatibility (criterion 5)', () => {
     it('POST returns the full shape and matches the committed example fixture', async () => {
-      const res = await request(app).post('/api/recipes').send(fullBody()).expect(201);
+      const res = await me().post('/api/recipes').send(fullBody()).expect(201);
       const r = res.body;
       expect(r.contributor).toMatchObject({ id: magosId, name: 'magos', bio: null, portraitUrl: null });
       expect(Object.keys(r.contributor).sort()).toEqual(['bio', 'id', 'joinedAt', 'name', 'portraitUrl']);
@@ -81,18 +88,18 @@ describeDb('recipes API', () => {
     });
 
     it('GET list, GET one and GET /api/tags/:name/recipes share the shape', async () => {
-      const created = (await request(app).post('/api/recipes').send(fullBody())).body;
-      const one = (await request(app).get(`/api/recipes/${created.id}`).expect(200)).body;
-      const list = (await request(app).get('/api/recipes').expect(200)).body;
-      const byTag = (await request(app).get('/api/tags/Beef/recipes').expect(200)).body;
+      const created = (await me().post('/api/recipes').send(fullBody())).body;
+      const one = (await me().get(`/api/recipes/${created.id}`).expect(200)).body;
+      const list = (await me().get('/api/recipes').expect(200)).body;
+      const byTag = (await me().get('/api/tags/Beef/recipes').expect(200)).body;
       expect(shapeOf(one)).toEqual(shapeOf(exampleFixture));
       expect(shapeOf(list[0])).toEqual(shapeOf(exampleFixture));
       expect(shapeOf(byTag[0])).toEqual(shapeOf(exampleFixture));
     });
 
     it('/api/search returns the same shape (contributor, sourceLabel)', async () => {
-      await request(app).post('/api/recipes').send(fullBody());
-      const res = (await request(app).get('/api/search').query({ q: 'bibimbap' }).expect(200)).body;
+      await me().post('/api/recipes').send(fullBody());
+      const res = (await me().get('/api/search').query({ q: 'bibimbap' }).expect(200)).body;
       expect(res).toHaveLength(1);
       expect(res[0].contributor.name).toBe('magos');
       expect(res[0].sourceLabel).toBe('HelloFresh');
@@ -100,61 +107,61 @@ describeDb('recipes API', () => {
     });
 
     it('sort=createdAt orders by creation; the default stays updatedAt', async () => {
-      const a = (await request(app).post('/api/recipes').send({ title: 'A' })).body;
+      const a = (await me().post('/api/recipes').send({ title: 'A' })).body;
       await new Promise((r) => setTimeout(r, 15));
-      const b = (await request(app).post('/api/recipes').send({ title: 'B' })).body;
+      const b = (await me().post('/api/recipes').send({ title: 'B' })).body;
       await new Promise((r) => setTimeout(r, 15));
-      await request(app).put(`/api/recipes/${a.id}`).send({ description: 'touched' }).expect(200);
+      await me().put(`/api/recipes/${a.id}`).send({ description: 'touched' }).expect(200);
 
-      const byCreated = (await request(app).get('/api/recipes?sort=createdAt')).body.map((r) => r.title);
-      const byDefault = (await request(app).get('/api/recipes')).body.map((r) => r.title);
+      const byCreated = (await me().get('/api/recipes?sort=createdAt')).body.map((r) => r.title);
+      const byDefault = (await me().get('/api/recipes')).body.map((r) => r.title);
       expect(byCreated).toEqual(['B', 'A']);
       expect(byDefault).toEqual(['A', 'B']);
       expect(b.id).toBeTruthy();
     });
 
     it('POST without source: 201, source "manual", sourceLabel null (the web form sends none)', async () => {
-      const res = await request(app).post('/api/recipes').send({ title: 'No source' }).expect(201);
+      const res = await me().post('/api/recipes').send({ title: 'No source' }).expect(201);
       expect(res.body.source).toBe('manual');
       expect(res.body.sourceLabel).toBeNull();
     });
 
     it.each(['', '   ', null])('blank source %j is treated as manual', async (source) => {
-      const res = await request(app).post('/api/recipes').send({ title: 'Blank', source }).expect(201);
+      const res = await me().post('/api/recipes').send({ title: 'Blank', source }).expect(201);
       expect(res.body.source).toBe('manual');
       expect(res.body.sourceLabel).toBeNull();
     });
 
     it('source is trimmed on write; the label is derived case-insensitively; other sources show trimmed', async () => {
-      const hf = await request(app).post('/api/recipes').send({ title: 'x', source: ' hellofresh ' }).expect(201);
+      const hf = await me().post('/api/recipes').send({ title: 'x', source: ' hellofresh ' }).expect(201);
       expect(hf.body.source).toBe('hellofresh');
       expect(hf.body.sourceLabel).toBe('HelloFresh');
-      const nyt = await request(app).post('/api/recipes').send({ title: 'y', source: ' NYT Cooking ' }).expect(201);
+      const nyt = await me().post('/api/recipes').send({ title: 'y', source: ' NYT Cooking ' }).expect(201);
       expect(nyt.body.source).toBe('NYT Cooking');
       expect(nyt.body.sourceLabel).toBe('NYT Cooking');
     });
 
-    it('POST without contributorId attributes to the default contributor (ruling 11)', async () => {
-      const res = await request(app).post('/api/recipes').send({ title: 'T' }).expect(201);
+    it('POST attributes the recipe to the signed-in caller (no fallback)', async () => {
+      const res = await me().post('/api/recipes').send({ title: 'T' }).expect(201);
       expect(res.body.contributor.id).toBe(magosId);
     });
 
-    it('POST with a known contributorId uses it', async () => {
+    it('a contributorId in a create body is ignored, never trusted', async () => {
       const ada = await db.prisma.contributor.create({ data: { name: 'Ada' } });
-      const res = await request(app).post('/api/recipes').send({ title: 'T', contributorId: ada.id }).expect(201);
-      expect(res.body.contributor.name).toBe('Ada');
+      const res = await me().post('/api/recipes').send({ title: 'T', contributorId: ada.id }).expect(201);
+      expect(res.body.contributor.id).toBe(magosId);
+      const bad = await me().post('/api/recipes').send({ title: 'T', contributorId: 'nope' }).expect(201);
+      expect(bad.body.contributor.id).toBe(magosId);
     });
 
-    it('an unknown contributorId is a clean 400 on POST and PUT, never an FK 500', async () => {
-      const bad = await request(app).post('/api/recipes').send({ title: 'T', contributorId: 'nope' });
-      expect(bad.status).toBe(400);
-      expect(bad.body.error).toMatch(/Unknown contributorId/);
-      const r = (await request(app).post('/api/recipes').send({ title: 'T' })).body;
-      const put = await request(app).put(`/api/recipes/${r.id}`).send({ contributorId: 'nope' });
-      expect(put.status).toBe(400);
-      const clear = await request(app).put(`/api/recipes/${r.id}`).send({ contributorId: null });
-      expect(clear.status).toBe(400);
-      expect(await db.prisma.recipe.count()).toBe(1);
+    it('a contributorId on PUT is ignored with a 200 (attribution is immutable, stated default D3)', async () => {
+      const ada = await db.prisma.contributor.create({ data: { name: 'Ada' } });
+      const r = (await me().post('/api/recipes').send({ title: 'T' })).body;
+      for (const contributorId of [ada.id, 'nope', null]) {
+        const put = await me().put(`/api/recipes/${r.id}`).send({ contributorId, title: 'T2' });
+        expect(put.status).toBe(200);
+        expect(put.body.contributor.id).toBe(magosId);
+      }
     });
 
     it('a request body in the old shape (what the current frontend sends) still succeeds', async () => {
@@ -164,23 +171,23 @@ describeDb('recipes API', () => {
         directions: ['Mix', 'Bake'],
         tags: ['Dessert']
       };
-      const res = await request(app).post('/api/recipes').send(old).expect(201);
+      const res = await me().post('/api/recipes').send(old).expect(201);
       expect(res.body.totalMinutes).toBe(15);
       expect(res.body.directions.map((d) => d.instruction)).toEqual(['Mix', 'Bake']);
       expect(res.body.ingredients[0].quantity).toBe(2);
-      await request(app).put(`/api/recipes/${res.body.id}`).send(old).expect(200);
+      await me().put(`/api/recipes/${res.body.id}`).send(old).expect(200);
     });
 
     it('raw (stored) source is returned as-is; mixed-case legacy rows are tolerated', async () => {
       await db.prisma.recipe.create({ data: { title: 'legacy', source: 'hellofresh', prepTime: 5, cookTime: 10 } });
-      const [r] = (await request(app).get('/api/recipes')).body;
+      const [r] = (await me().get('/api/recipes')).body;
       expect(r.source).toBe('hellofresh');
       expect(r.sourceLabel).toBe('HelloFresh');
       expect(r.contributor).toBeNull();            // contributorId NULL (written by the 1.2.0 image)
       expect(r.totalMinutes).toBe(15);             // read: totalMinutes ?? prep+cook
       expect(r.timeSplitEstimated).toBe(false);
-      await request(app).get(`/api/recipes/${r.id}`).expect(200);
-      await request(app).put(`/api/recipes/${r.id}`).send({ title: 'edited' }).expect(200);
+      await me().get(`/api/recipes/${r.id}`).expect(200);
+      await me().put(`/api/recipes/${r.id}`).send({ title: 'edited' }).expect(200);
     });
 
     it('has indexes on contributorId, lower(source) and totalMinutes (pg_indexes)', async () => {
@@ -195,10 +202,12 @@ describeDb('recipes API', () => {
   // ---- criterion 6 ----
   describe('PUT is a partial, transactional update (criterion 6)', () => {
     async function seeded() {
-      const ada = await db.prisma.contributor.create({ data: { name: 'Ada' } });
-      const res = await request(app)
+      // Ada signs in (first sign-in creates her), is renamed, and files the recipe.
+      const adaCookie = await t.signIn('ada@example.com');
+      const ada = await db.prisma.contributor.update({ where: { email: 'ada@example.com' }, data: { name: 'Ada' } });
+      const res = await authed(app, adaCookie)
         .post('/api/recipes')
-        .send(fullBody({ contributorId: ada.id, timeSplitEstimated: true, vegetarian: true }))
+        .send(fullBody({ timeSplitEstimated: true, vegetarian: true }))
         .expect(201);
       return { ada, recipe: res.body };
     }
@@ -213,7 +222,7 @@ describeDb('recipes API', () => {
           'Serve warm.'
         ]
       };
-      const res = await request(app).put(`/api/recipes/${recipe.id}`).send(oldShape).expect(200);
+      const res = await me().put(`/api/recipes/${recipe.id}`).send(oldShape).expect(200);
       const r = res.body;
       expect(r.title).toBe('Bibimbap (edited)');
       expect(r.directions.map((d) => d.heading)).toEqual(['Cook the rice', null]);
@@ -232,7 +241,7 @@ describeDb('recipes API', () => {
 
     it('omitted ingredients/directions/tags are untouched; only supplied fields change', async () => {
       const { recipe } = await seeded();
-      const res = await request(app).put(`/api/recipes/${recipe.id}`).send({ notes: 'new tip' }).expect(200);
+      const res = await me().put(`/api/recipes/${recipe.id}`).send({ notes: 'new tip' }).expect(200);
       expect(res.body.notes).toBe('new tip');
       expect(res.body.title).toBe('Bibimbap');
       expect(res.body.ingredients).toHaveLength(3);
@@ -242,7 +251,7 @@ describeDb('recipes API', () => {
 
     it('explicit heading (including null) is honoured when supplied', async () => {
       const { recipe } = await seeded();
-      const res = await request(app).put(`/api/recipes/${recipe.id}`)
+      const res = await me().put(`/api/recipes/${recipe.id}`)
         .send({ directions: [{ instruction: 'One', heading: null }, { instruction: 'Two', heading: 'Serve' }] })
         .expect(200);
       expect(res.body.directions.map((d) => d.heading)).toEqual([null, 'Serve']);
@@ -250,39 +259,39 @@ describeDb('recipes API', () => {
 
     it('prepTime/cookTime without totalMinutes re-derive the stored total from the merged values', async () => {
       const { recipe } = await seeded();
-      const res = await request(app).put(`/api/recipes/${recipe.id}`).send({ cookTime: 40 }).expect(200);
+      const res = await me().put(`/api/recipes/${recipe.id}`).send({ cookTime: 40 }).expect(200);
       expect(res.body).toMatchObject({ prepTime: 10, cookTime: 40, totalMinutes: 50, timeSplitEstimated: true });
     });
 
     it('a forced failure midway rolls everything back', async () => {
       const { recipe } = await seeded();
-      const before = (await request(app).get(`/api/recipes/${recipe.id}`)).body;
+      const before = (await me().get(`/api/recipes/${recipe.id}`)).body;
       // The second ingredient has no name: Prisma rejects the nested create
       // AFTER the existing ingredients were deleted inside the transaction.
-      const res = await request(app).put(`/api/recipes/${recipe.id}`).send({
+      const res = await me().put(`/api/recipes/${recipe.id}`).send({
         title: 'Should not stick',
         ingredients: [{ name: 'fine', amount: '1' }, { amount: '2' }],
         directions: ['gone?'],
         tags: ['Different']
       });
       expect(res.status).toBe(500);
-      const after = (await request(app).get(`/api/recipes/${recipe.id}`)).body;
+      const after = (await me().get(`/api/recipes/${recipe.id}`)).body;
       expect(after).toEqual(before);
       expect(after.ingredients).toHaveLength(3);
       expect(after.directions).toHaveLength(2);
     });
 
     it('404 for an unknown recipe', async () => {
-      await request(app).put('/api/recipes/does-not-exist').send({ title: 'x' }).expect(404);
+      await me().put('/api/recipes/does-not-exist').send({ title: 'x' }).expect(404);
     });
   });
 
   // ---- criterion 11 ----
   describe('timeSplitEstimated (criterion 11)', () => {
     it('is a stored boolean defaulting to false; prep/cook are never changed by it', async () => {
-      const a = (await request(app).post('/api/recipes').send({ title: 'a', prepTime: 7, cookTime: 8 })).body;
+      const a = (await me().post('/api/recipes').send({ title: 'a', prepTime: 7, cookTime: 8 })).body;
       expect(a.timeSplitEstimated).toBe(false);
-      const b = (await request(app).post('/api/recipes')
+      const b = (await me().post('/api/recipes')
         .send({ title: 'b', prepTime: 7, cookTime: 8, timeSplitEstimated: true })).body;
       expect(b).toMatchObject({ timeSplitEstimated: true, prepTime: 7, cookTime: 8 });
     });
@@ -291,20 +300,20 @@ describeDb('recipes API', () => {
   // ---- criterion 12 ----
   describe('tags (criterion 12)', () => {
     it('POST and PUT with prep+cook produce no time tag; no cuisine/category/Vegetarian tag either', async () => {
-      const r = (await request(app).post('/api/recipes').send(
+      const r = (await me().post('/api/recipes').send(
         { title: 't', prepTime: 10, cookTime: 10, cuisine: 'Korean', category: 'Main', vegetarian: true, tags: ['chicken'] }
       ).expect(201)).body;
       expect(r.tags.map((t) => t.name)).toEqual(['Chicken']);
-      const u = (await request(app).put(`/api/recipes/${r.id}`).send({ prepTime: 5, cookTime: 5, tags: ['Chicken', 'soup'] }).expect(200)).body;
+      const u = (await me().put(`/api/recipes/${r.id}`).send({ prepTime: 5, cookTime: 5, tags: ['Chicken', 'soup'] }).expect(200)).body;
       expect(u.tags.map((t) => t.name).sort()).toEqual(['Chicken', 'Soup']);
       expect(await db.prisma.tag.findMany({ where: { name: { in: ['15 Minutes', '30 Minutes', 'Vegetarian', 'Korean'] } } })).toEqual([]);
     });
 
     it('PUT with tags omitted leaves tags unchanged; tags: [] clears them', async () => {
-      const r = (await request(app).post('/api/recipes').send({ title: 't', tags: ['a', 'b'] })).body;
-      const kept = (await request(app).put(`/api/recipes/${r.id}`).send({ title: 't2' }).expect(200)).body;
+      const r = (await me().post('/api/recipes').send({ title: 't', tags: ['a', 'b'] })).body;
+      const kept = (await me().put(`/api/recipes/${r.id}`).send({ title: 't2' }).expect(200)).body;
       expect(kept.tags.map((t) => t.name).sort()).toEqual(['A', 'B']);
-      const cleared = (await request(app).put(`/api/recipes/${r.id}`).send({ tags: [] }).expect(200)).body;
+      const cleared = (await me().put(`/api/recipes/${r.id}`).send({ tags: [] }).expect(200)).body;
       expect(cleared.tags).toEqual([]);
     });
 
@@ -312,15 +321,15 @@ describeDb('recipes API', () => {
       const r = await db.prisma.recipe.create({
         data: { title: 'legacy', tags: { create: [{ name: '30 Minutes' }, { name: 'Vegetarian' }] } }
       });
-      const res = (await request(app).put(`/api/recipes/${r.id}`).send({ title: 'still legacy' }).expect(200)).body;
+      const res = (await me().put(`/api/recipes/${r.id}`).send({ title: 'still legacy' }).expect(200)).body;
       expect(res.tags.map((t) => t.name).sort()).toEqual(['30 Minutes', 'Vegetarian']);
     });
 
     it('/api/tags omits tags that have no recipes (orphaned legacy rows)', async () => {
       await db.prisma.tag.create({ data: { name: 'Orphan' } });
-      await request(app).post('/api/recipes').send({ title: 'a', tags: ['Soup'] });
-      await request(app).post('/api/recipes').send({ title: 'b', tags: ['Soup', 'Chicken'] });
-      const tags = (await request(app).get('/api/tags').expect(200)).body;
+      await me().post('/api/recipes').send({ title: 'a', tags: ['Soup'] });
+      await me().post('/api/recipes').send({ title: 'b', tags: ['Soup', 'Chicken'] });
+      const tags = (await me().get('/api/tags').expect(200)).body;
       expect(tags.map((t) => [t.name, t.recipeCount])).toEqual([['Soup', 2], ['Chicken', 1]]);
     });
   });
@@ -329,10 +338,8 @@ describeDb('recipes API', () => {
 // ---- criterion 10: contributor integrity (destructive; its own database) ----
 describeDb('contributor integrity (criterion 10)', () => {
   let db;
-  let app;
   beforeAll(async () => {
     db = await createScratchDb();
-    app = createApp({ prisma: db.prisma });
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
   afterAll(async () => {
@@ -369,22 +376,9 @@ describeDb('contributor integrity (criterion 10)', () => {
 
   it('deleting a contributor that owns recipes fails (ON DELETE RESTRICT) and the recipes survive', async () => {
     const c = await db.prisma.contributor.create({ data: { name: 'Owner' } });
-    await request(app).post('/api/recipes').send({ title: 'Keep me', contributorId: c.id }).expect(201);
+    await db.prisma.recipe.create({ data: { title: 'Keep me', contributorId: c.id } });
     await expect(db.prisma.contributor.delete({ where: { id: c.id } })).rejects.toMatchObject({ code: 'P2003' });
     expect(await db.prisma.recipe.count({ where: { contributorId: c.id } })).toBe(1);
-  });
-
-  it('a missing default contributor is a clear 500 on create, never a NULL contributor', async () => {
-    await db.prisma.recipe.deleteMany();
-    const magos = await db.prisma.contributor.findFirst({ where: { name: 'magos' } });
-    await db.prisma.contributor.delete({ where: { id: magos.id } });
-    const res = await request(app).post('/api/recipes').send({ title: 'Orphan?' });
-    expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/Default contributor "magos" is missing/);
-    expect(await db.prisma.recipe.count()).toBe(0);
-    // the explicit id still works
-    const c = await db.prisma.contributor.create({ data: { name: 'Other' } });
-    await request(app).post('/api/recipes').send({ title: 'Fine', contributorId: c.id }).expect(201);
   });
 });
 

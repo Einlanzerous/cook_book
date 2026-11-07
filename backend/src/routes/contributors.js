@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listContributors, getContributorProfile, createContributor } from '../services/contributors.js';
+import { listContributors, getContributorProfile } from '../services/contributors.js';
 
 const router = Router();
 
@@ -23,14 +23,8 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// Create a cook. 409 on a case-insensitive duplicate name (unique index).
-// There is deliberately no DELETE: Recipe.contributorId is ON DELETE RESTRICT.
-router.post('/', async (req, res, next) => {
-  try {
-    res.status(201).json(await createContributor(req.prisma, req.body));
-  } catch (error) {
-    next(error);
-  }
-});
+// There is deliberately no POST or DELETE: contributors are created only by a
+// verified first sign-in (services/identity.js), and Recipe.contributorId is
+// ON DELETE RESTRICT.
 
 export default router;

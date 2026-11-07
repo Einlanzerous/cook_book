@@ -1,8 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
+import { createAuthKit } from './helpers/auth.js';
 
 describe('GET /api/health', () => {
+  const mk = async () => { const kit = await createAuthKit(); return createApp({ prisma: {}, config: kit.config, verifyAccess: kit.verifyAccess, log: () => {} }); };
   const saved = { APP_VERSION: process.env.APP_VERSION, GIT_SHA: process.env.GIT_SHA };
   afterEach(() => {
     for (const [k, v] of Object.entries(saved)) {
@@ -14,7 +16,7 @@ describe('GET /api/health', () => {
   it('reports status ok plus the build identity from the environment', async () => {
     process.env.APP_VERSION = '1.2.3';
     process.env.GIT_SHA = 'a'.repeat(40);
-    const res = await request(createApp({ prisma: {} })).get('/api/health');
+    const res = await request(await mk()).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ status: 'ok', version: '1.2.3', sha: 'a'.repeat(40) });
   });
@@ -22,7 +24,7 @@ describe('GET /api/health', () => {
   it('still answers when the image carries no identity', async () => {
     process.env.APP_VERSION = '';
     process.env.GIT_SHA = '';
-    const res = await request(createApp({ prisma: {} })).get('/api/health');
+    const res = await request(await mk()).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.version).toBe('dev');
