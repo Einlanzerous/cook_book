@@ -1,11 +1,12 @@
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useRecipeStore } from '../../stores/recipeStore'
+import { useMe } from '../../stores/me'
+import { saveDraft, loadDraft, clearDraft, isUnauthorized, signInUrl, SESSION_EXPIRED } from '../../lib/draft'
 import { splitIngredientList, looksLikeList } from '../../lib/ingredientLine'
 import { emptyForm, formFromRecipe, validateForm, buildPayload } from '../../lib/recipeForm'
 import TagInput from './TagInput.vue'
-import CookPicker from './CookPicker.vue'
 
 // "Write it out" (and Edit). With `recipe` it edits that recipe; the PUT sends
 // only what this form owns, and the form loads everything it shows (headings,
@@ -15,12 +16,23 @@ const props = defineProps({
 })
 
 const router = useRouter()
+const route = useRoute()
 const store = useRecipeStore()
+const me = useMe()
 
 const form = reactive(props.recipe ? formFromRecipe(props.recipe) : emptyForm())
 const errors = reactive({})
 const loading = ref(false)
 const submitError = ref('')
+const sessionExpired = ref(false)
+
+// A draft saved when a save hit a 401 comes back after the sign-in round trip.
+const draftKey = route.path
+const draft = loadDraft(draftKey)
+if (draft) Object.assign(form, draft)
+
+// The cook is whoever is signed in (the server decides; this is only the label).
+const filedAs = computed(() => (props.recipe ? props.recipe.contributor?.name : null) || me.me?.name || '')
 
 onMounted(() => {
   store.fetchTags()
@@ -71,17 +83,26 @@ async function handleSubmit() {
   }
 
   loading.value = true
+  sessionExpired.value = false
   try {
     const payload = buildPayload(form, props.recipe)
     if (props.recipe) {
       await store.updateRecipe(props.recipe.id, payload)
+      clearDraft(draftKey)
       router.push(`/recipe/${props.recipe.id}`)
     } else {
       const created = await store.createRecipe(payload)
+      clearDraft(draftKey)
       router.push(`/recipe/${created.id}`)
     }
   } catch (e) {
-    submitError.value = e.response?.data?.error || 'Failed to save recipe'
+    if (isUnauthorized(e)) {
+      saveDraft(draftKey, { ...form })
+      sessionExpired.value = true
+      submitError.value = SESSION_EXPIRED
+    } else {
+      submitError.value = e.response?.data?.error || 'Failed to save recipe'
+    }
   } finally {
     loading.value = false
   }
@@ -96,6 +117,7 @@ function cancel() {
   <form class="flex flex-col gap-11" novalidate @submit.prevent="handleSubmit">
     <div v-if="submitError" class="rounded border border-danger/30 bg-danger-tint px-4 py-3 text-danger" role="alert">
       {{ submitError }}
+      <a v-if="sessionExpired" :href="signInUrl(route.fullPath)" class="ml-1 font-medium underline" data-test="session-sign-in">Sign in</a>
     </div>
 
     <div class="flex flex-col gap-6">
@@ -191,7 +213,10 @@ function cancel() {
           <span class="label">Tags</span>
           <TagInput v-model="form.tags" />
         </div>
-        <CookPicker id="filed-as" v-model="form.contributorId" :error="errors.contributorId" />
+        <div class="flex flex-col gap-2" data-test="filed-as">
+          <span class="label">Filed as</span>
+          <p class="py-2 text-base text-ink">{{ filedAs }}</p>
+        </div>
       </div>
 
       <!-- Photo upload is COOK-25. Until then: an image link, and an honest note. -->

@@ -6,11 +6,13 @@
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { recipeApi } from '../../services/api'
+import { useMe } from '../../stores/me'
 
 const props = defineProps({ show: Boolean })
 const emit = defineEmits(['close'])
 
 const router = useRouter()
+const me = useMe()
 
 const panel = ref(null)
 const vegetarian = ref(false)
@@ -181,7 +183,7 @@ onBeforeUnmount(() => {
                 {{ vegetarian ? 'No vegetarian recipes yet.' : 'The book is empty.' }}
               </h2>
               <p class="text-[13px] text-muted">
-                {{ vegetarian ? 'Nothing in the book is marked vegetarian. Try Anything, or add one.' : 'There is nothing to pick from. Add a recipe and come back.' }}
+                {{ vegetarian ? 'Nothing in the book is marked vegetarian. Try Anything' + (me.canWrite ? ', or add one.' : '.') : 'There is nothing to pick from' + (me.canWrite ? '. Add a recipe and come back.' : ' yet.') }}
               </p>
             </div>
           </template>
@@ -221,7 +223,7 @@ onBeforeUnmount(() => {
         <div class="flex flex-wrap gap-3">
           <template v-if="status === 'empty'">
             <button v-if="vegetarian" type="button" class="btn btn-primary flex-1 !px-[18px] !py-[13px] !text-[15px]" @click="roll({ veg: false })">Show anything</button>
-            <router-link v-else to="/create" class="btn btn-primary flex-1 !px-[18px] !py-[13px] !text-[15px] !text-page no-underline hover:!text-page" @click="leave">Add a recipe</router-link>
+            <router-link v-else-if="me.canWrite" to="/create" class="btn btn-primary flex-1 !px-[18px] !py-[13px] !text-[15px] !text-page no-underline hover:!text-page" @click="leave">Add a recipe</router-link>
             <button type="button" class="btn btn-secondary flex-1 !px-[18px] !py-[13px] !text-[15px]" @click="close">Close</button>
           </template>
           <template v-else-if="status === 'error'">

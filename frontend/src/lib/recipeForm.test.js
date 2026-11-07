@@ -24,10 +24,10 @@ const stored = {
 }
 
 describe('edit round trip', () => {
-  it('sends headings, notes, cook, category, cuisine and vegetarian back unchanged', () => {
+  it('sends headings, notes, category, cuisine and vegetarian back unchanged, and never a contributorId', () => {
     const payload = buildPayload(formFromRecipe(stored), stored)
+    expect(payload).not.toHaveProperty('contributorId')
     expect(payload).toMatchObject({
-      contributorId: 'c-mara',
       category: 'Main Course',
       cuisine: 'Korean',
       vegetarian: false,
@@ -69,7 +69,7 @@ describe('edit round trip', () => {
 describe('validateForm', () => {
   const filled = () => {
     const f = emptyForm()
-    Object.assign(f, { title: 'Toast', source: 'Me', contributorId: 'c1' })
+    Object.assign(f, { title: 'Toast', source: 'Me' })
     f.ingredients = [{ amount: '1', unit: 'slice', name: 'Bread' }]
     f.directions = [{ heading: '', instruction: 'Toast it.' }]
     return f
@@ -79,9 +79,9 @@ describe('validateForm', () => {
     expect(validateForm(filled()).errors).toEqual({})
   })
 
-  it('requires title, source, cook, an ingredient and a step when adding', () => {
+  it('requires title, source, an ingredient and a step when adding', () => {
     const { errors } = validateForm(emptyForm())
-    expect(Object.keys(errors).sort()).toEqual(['contributorId', 'directions', 'ingredients', 'source', 'title'])
+    expect(Object.keys(errors).sort()).toEqual(['directions', 'ingredients', 'source', 'title'])
   })
 
   it('rejects negative or non-numeric minutes and a bad link', () => {
@@ -94,7 +94,7 @@ describe('validateForm', () => {
 describe('buildPayload for a new recipe', () => {
   it('trims, nulls blanks and always sends a source', () => {
     const f = emptyForm()
-    Object.assign(f, { title: '  Toast ', source: ' Me ', contributorId: 'c1', servings: '2', prepTime: '5' })
+    Object.assign(f, { title: '  Toast ', source: ' Me ', servings: '2', prepTime: '5' })
     f.ingredients = [{ amount: ' 1 ', unit: '', name: 'Bread ' }, { amount: '', unit: '', name: '' }]
     f.directions = [{ heading: ' ', instruction: ' Toast. ' }]
     const p = buildPayload(f)
@@ -108,7 +108,7 @@ describe('buildPayload for a new recipe', () => {
 })
 
 describe('payloadFromPreview', () => {
-  it('carries the preview through with the chosen cook and no step numbers', () => {
+  it('carries the preview through with no step numbers and no contributorId', () => {
     const p = payloadFromPreview(
       {
         title: 'T', description: null, imageUrl: null, source: 'HelloFresh', sourceUrl: 'https://www.hellofresh.com/x',
@@ -116,10 +116,10 @@ describe('payloadFromPreview', () => {
         totalMinutes: 30, timeSplitEstimated: true,
         ingredients: [{ amount: '1', unit: null, name: 'x' }],
         directions: [{ stepNumber: 1, heading: null, instruction: 'Go.' }], tags: ['Beef']
-      },
-      'c1'
+      }
     )
-    expect(p).toMatchObject({ contributorId: 'c1', source: 'HelloFresh', timeSplitEstimated: true, directions: [{ heading: null, instruction: 'Go.' }] })
+    expect(p).not.toHaveProperty('contributorId')
+    expect(p).toMatchObject({ source: 'HelloFresh', timeSplitEstimated: true, directions: [{ heading: null, instruction: 'Go.' }] })
     expect(p.directions[0]).not.toHaveProperty('stepNumber')
   })
 })

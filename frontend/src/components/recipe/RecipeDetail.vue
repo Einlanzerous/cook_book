@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRecipeStore } from '../../stores/recipeStore'
+import { useMe } from '../../stores/me'
 import { formatMinutes, formatDate } from '../../lib/format'
 import IngredientList from './IngredientList.vue'
 import DirectionsList from './DirectionsList.vue'
@@ -15,11 +16,21 @@ const props = defineProps({
 
 const router = useRouter()
 const store = useRecipeStore()
+const me = useMe()
+const deleteError = ref('')
 
 async function deleteRecipe() {
-  if (confirm('Are you sure you want to delete this recipe?')) {
+  if (!confirm('Are you sure you want to delete this recipe?')) return
+  deleteError.value = ''
+  try {
     await store.deleteRecipe(props.recipe.id)
     router.push('/')
+  } catch (e) {
+    const status = e.response?.status
+    deleteError.value =
+      status === 401 ? 'Your session expired. Sign in again to delete this recipe.'
+      : status === 403 ? 'Only the person who filed this recipe can delete it.'
+      : 'Could not delete this recipe.'
   }
 }
 
@@ -65,10 +76,11 @@ const stats = computed(() => {
     <div class="mb-10 flex items-center justify-between gap-4 text-sm">
       <router-link to="/" class="text-muted hover:text-ink">← All recipes</router-link>
       <div class="flex gap-5 text-muted">
-        <router-link :to="`/edit/${recipe.id}`" class="hover:text-ink">Edit</router-link>
-        <button type="button" class="hover:text-danger" @click="deleteRecipe">Delete</button>
+        <router-link v-if="me.canEdit(recipe)" :to="`/edit/${recipe.id}`" class="hover:text-ink" data-test="edit">Edit</router-link>
+        <button v-if="me.canDelete(recipe)" type="button" class="hover:text-danger" data-test="delete" @click="deleteRecipe">Delete</button>
       </div>
     </div>
+    <p v-if="deleteError" class="mb-6 rounded border border-danger/30 bg-danger-tint px-4 py-3 text-danger" role="alert">{{ deleteError }}</p>
 
     <header class="mb-10 flex max-w-[860px] flex-col gap-5">
       <div v-if="eyebrow || recipe.vegetarian" class="eyebrow">

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRecipeStore } from '../stores/recipeStore'
+import { useMe } from '../stores/me'
 import { appName } from '../config'
 import RecipeCard from '../components/recipe/RecipeCard.vue'
 import FeaturedRecipe from '../components/recipe/FeaturedRecipe.vue'
@@ -8,6 +9,7 @@ import TabNavigation from '../components/layout/TabNavigation.vue'
 import { ALL, buildFilters, cookCount, filterRecipes, pickFeatured, plural } from '../services/library'
 
 const store = useRecipeStore()
+const me = useMe()
 
 const filter = ref(ALL)
 
@@ -56,6 +58,7 @@ function browse() {
         <div class="flex flex-wrap items-center gap-5">
           <button type="button" class="btn btn-primary px-5 py-3 text-[15px]" @click="browse">Browse the collection</button>
           <router-link
+            v-if="me.canWrite"
             to="/create"
             class="border-b border-fir pb-0.5 text-[15px] font-medium text-fir no-underline hover:border-fir-dark hover:text-fir-dark"
           >
@@ -96,9 +99,9 @@ function browse() {
         Try adjusting your search or <button @click="store.clearSearch" class="text-fir hover:text-fir-dark">clear the search</button>.
       </p>
       <p v-else class="text-muted">
-        Get started by creating your first recipe.
+        {{ me.canWrite ? 'Get started by creating your first recipe.' : 'Nothing has been added to the book yet.' }}
       </p>
-      <router-link v-if="!store.searchQuery" to="/create" class="btn btn-primary mt-4">
+      <router-link v-if="!store.searchQuery && me.canWrite" to="/create" class="btn btn-primary mt-4">
         Create Recipe
       </router-link>
     </div>

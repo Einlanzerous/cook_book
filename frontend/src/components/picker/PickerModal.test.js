@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
+import { createPinia } from 'pinia'
+import { useMe } from '../../stores/me'
 import PickerModal from './PickerModal.vue'
 import { recipeApi } from '../../services/api'
 
@@ -22,7 +24,11 @@ const reply = (recipe, matches = recipe ? 2 : 0) => ({ data: { recipe, matches }
 
 const mounted = []
 
-async function setup(props = { show: true }) {
+async function setup(props = { show: true }, { signedIn = true } = {}) {
+  const pinia = createPinia()
+  if (signedIn) {
+    useMe(pinia).me = { id: 'c1', name: 'Mara Okafor' }
+  }
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -36,7 +42,7 @@ async function setup(props = { show: true }) {
   const wrapper = mount(PickerModal, {
     props,
     attachTo: document.body,
-    global: { plugins: [router], stubs: { teleport: true } }
+    global: { plugins: [router, pinia], stubs: { teleport: true } }
   })
   mounted.push(wrapper)
   await flushPromises()
@@ -127,6 +133,14 @@ describe('PickerModal', () => {
     const { wrapper } = await setup()
     expect(wrapper.find('[data-testid="picker-empty"]').text()).toContain('The book is empty.')
     expect(wrapper.find('a[href="/create"]').text()).toBe('Add a recipe')
+  })
+
+  it('empty book, signed out: no link to /create anywhere (COOK-23)', async () => {
+    recipeApi.random.mockResolvedValue(reply(null))
+    const { wrapper } = await setup({ show: true }, { signedIn: false })
+    expect(wrapper.find('[data-testid="picker-empty"]').text()).toContain('The book is empty.')
+    expect(wrapper.find('a[href="/create"]').exists()).toBe(false)
+    expect(btn(wrapper, 'Close')).toBeTruthy()
   })
 
   it('error: offers Try again', async () => {
