@@ -1,11 +1,15 @@
 import { Router } from 'express';
+import { recipeInclude, presentRecipe } from '../services/recipeShape.js';
 
 const router = Router();
 
 // List all tags with recipe counts
 router.get('/', async (req, res, next) => {
   try {
+    // Tags with no recipes are omitted: legacy Tag rows are orphaned once the
+    // old recipes are re-imported (cleanup is COOK-26) and must not show as 0.
     const tags = await req.prisma.tag.findMany({
+      where: { recipes: { some: {} } },
       include: {
         _count: {
           select: { recipes: true }
@@ -37,11 +41,7 @@ router.get('/:name/recipes', async (req, res, next) => {
       where: { name: req.params.name },
       include: {
         recipes: {
-          include: {
-            ingredients: true,
-            directions: { orderBy: { stepNumber: 'asc' } },
-            tags: true
-          }
+          include: recipeInclude
         }
       }
     });
@@ -50,7 +50,7 @@ router.get('/:name/recipes', async (req, res, next) => {
       return res.status(404).json({ error: 'Tag not found' });
     }
 
-    res.json(tag.recipes);
+    res.json(tag.recipes.map(presentRecipe));
   } catch (error) {
     next(error);
   }

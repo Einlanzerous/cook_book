@@ -1,35 +1,58 @@
+@import '@fontsource-variable/newsreader/opsz.css';
+@import '@fontsource-variable/newsreader/opsz-italic.css';
+@import '@fontsource-variable/public-sans/wght.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  html {
+    @apply bg-page;
+  }
   body {
-    @apply antialiased text-gray-900;
+    @apply bg-page font-sans text-ink antialiased;
+  }
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-fir;
   }
 }
 
 @layer components {
+  /* Buttons: 3px radius, flat, fir. */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200;
+    @apply inline-flex items-center justify-center whitespace-nowrap rounded border border-transparent px-4 py-2.5 text-sm font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
   }
-
   .btn-primary {
-    @apply bg-orange-600 text-white hover:bg-orange-700 focus:ring-orange-500;
+    @apply bg-fir text-page hover:bg-fir-dark;
   }
-
   .btn-secondary {
-    @apply bg-white text-gray-700 border-gray-300 hover:bg-gray-50 focus:ring-orange-500;
+    @apply border-fir bg-transparent text-fir hover:bg-fir-tint;
   }
-
   .btn-danger {
-    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+    @apply bg-danger text-page hover:opacity-90;
   }
 
+  /* Underline inputs (no box). */
   .input {
-    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm;
+    @apply block w-full rounded-none border-0 border-b border-rule-strong bg-transparent px-0.5 py-2 text-base text-ink placeholder-faint focus:border-fir focus:outline-none focus:ring-0;
+  }
+  .input:focus {
+    box-shadow: 0 1px 0 0 theme('colors.fir.DEFAULT');
   }
 
+  /* Mono uppercase eyebrow / field label. */
   .label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
+    @apply mb-1 block font-mono text-[11px] uppercase tracking-eyebrow text-muted;
+  }
+  .eyebrow {
+    @apply font-mono text-xs uppercase tracking-eyebrow text-muted;
+  }
+
+  /* Hatched photo placeholder. */
+  .photo-placeholder {
+    background: repeating-linear-gradient(135deg, theme('colors.photo.a') 0 10px, theme('colors.photo.b') 10px 20px);
   }
 }

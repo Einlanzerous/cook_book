@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { normalizeAmount } from './quantity.js';
 
 export async function parseHelloFreshUrl(url) {
   try {
@@ -45,21 +46,23 @@ function parseJsonLd(data) {
     });
   }
 
-  const directions = [];
+  const rawDirections = [];
   if (data.recipeInstructions) {
     data.recipeInstructions.forEach(instruction => {
       if (typeof instruction === 'string') {
-        directions.push(instruction);
+        rawDirections.push(instruction);
       } else if (instruction.text) {
-        directions.push(instruction.text);
+        rawDirections.push(instruction.text);
       }
     });
   }
+  const directions = cleanDirections(rawDirections);
 
   // Extract times - HelloFresh often only provides totalTime
   let prepTime = null;
   let cookTime = null;
   let totalTime = null;
+  let timeSplitEstimated = false;
 
   if (data.prepTime) {
     prepTime = parseDuration(data.prepTime);
@@ -69,18 +72,24 @@ function parseJsonLd(data) {
   }
   if (data.totalTime) {
     totalTime = parseDuration(data.totalTime);
-    // If we only have totalTime, estimate prep as 1/3 and cook as 2/3
+    // If we only have totalTime, estimate prep as 1/3 and cook as 2/3. The split
+    // is a guess, so it is flagged (timeSplitEstimated) for consumers.
     if (!prepTime && !cookTime && totalTime) {
       prepTime = Math.round(totalTime / 3);
       cookTime = totalTime - prepTime;
+      timeSplitEstimated = true;
     }
   }
 
-  // Calculate total time for tag generation
-  const calculatedTotalTime = totalTime || (prepTime || 0) + (cookTime || 0);
+  // Stored total: the page's own total when given, else prep + cook.
+  const totalMinutes = totalTime || (prepTime || 0) + (cookTime || 0) || null;
 
-  // Generate tags based on content
-  const tags = generateTags(data.name, ingredients, data.recipeCuisine, data.recipeCategory, calculatedTotalTime);
+  // Category and cuisine are columns, not tags (COOK-6).
+  const category = firstText(data.recipeCategory);
+  let cuisine = firstText(data.recipeCuisine);
+
+  const detected = detectTags(data.name, ingredients);
+  if (!cuisine) cuisine = detected.cuisine;
 
   return {
     title: data.name || 'Imported Recipe',
@@ -89,9 +98,14 @@ function parseJsonLd(data) {
     servings: parseInt(data.recipeYield) || 2,
     prepTime,
     cookTime,
+    totalMinutes,
+    timeSplitEstimated,
+    category,
+    cuisine,
+    vegetarian: detected.vegetarian,
     ingredients,
     directions,
-    tags
+    tags: detected.tags
   };
 }
 
@@ -109,15 +123,16 @@ function parseHtml($) {
     }
   });
 
-  const directions = [];
+  const rawDirections = [];
   $('[data-test-id="instruction-step"], .instructions-list li, [class*="instruction"] p').each((i, el) => {
     const text = $(el).text().trim();
     if (text && text.length > 10) {
-      directions.push(text);
+      rawDirections.push(text);
     }
   });
+  const directions = cleanDirections(rawDirections);
 
-  const tags = generateTags(title, ingredients, null, null, null);
+  const detected = detectTags(title, ingredients);
 
   return {
     title,
@@ -126,61 +141,102 @@ function parseHtml($) {
     servings: 2,
     prepTime: null,
     cookTime: null,
+    totalMinutes: null,
+    timeSplitEstimated: false,
+    category: null,
+    cuisine: detected.cuisine,
+    vegetarian: detected.vegetarian,
     ingredients,
     directions,
-    tags
+    tags: detected.tags
   };
 }
 
-// Normalize Unicode fractions to ASCII
-function normalizeFractions(str) {
-  if (!str) return str;
-  return str
-    .replace(/¼/g, '1/4')
-    .replace(/½/g, '1/2')
-    .replace(/¾/g, '3/4')
-    .replace(/⅓/g, '1/3')
-    .replace(/⅔/g, '2/3')
-    .replace(/⅛/g, '1/8')
-    .replace(/⅜/g, '3/8')
-    .replace(/⅝/g, '5/8')
-    .replace(/⅞/g, '7/8')
-    .replace(/⅕/g, '1/5')
-    .replace(/⅖/g, '2/5')
-    .replace(/⅗/g, '3/5')
-    .replace(/⅘/g, '4/5')
-    .replace(/⅙/g, '1/6')
-    .replace(/⅚/g, '5/6');
-}
+// ---------------------------------------------------------------------------
+// Ingredient strings (COOK-27). The whole leading quantity token is read first
+// (integer, decimal, ASCII or Unicode fraction, mixed number, range), then the
+// unit, then the name. The old parser captured only [\d./\s] and split on the
+// first other character, so "1/2 cup X" became amount "1" + name "/2 cup X".
+// Unicode fractions are normalised by quantity.js, which also turns '1½' into
+// '1 1/2' (not '11/2').
+// ---------------------------------------------------------------------------
 
-function parseIngredientString(str) {
-  // Normalize Unicode fractions first
-  const normalized = normalizeFractions(str);
+const NUM = String.raw`(?:\d+\s+\d+\s*/\s*\d+|\d+\s*/\s*\d+|\d+(?:\.\d+)?|\.\d+)`;
+const QUANTITY_RE = new RegExp(String.raw`^(${NUM}(?:\s*(?:-|–|—|to)\s*${NUM})?)(?![\d./])`, 'i');
 
-  // Match: optional amount (including fractions), optional unit, then name
-  // Amount can be: "1", "1.5", "1/2", "1 1/2"
-  const match = normalized.match(/^([\d./\s]+?)?\s*(oz|ounce|ounces|lb|lbs|pound|pounds|cup|cups|tbsp|tsp|tablespoon|tablespoons|teaspoon|teaspoons|g|kg|ml|l|piece|pieces|clove|cloves|unit|units)?\s*(.+)$/i);
+// Real units, kept as written (lower-cased).
+const UNITS = [
+  'ounces', 'ounce', 'oz', 'pounds', 'pound', 'lbs', 'lb', 'cups', 'cup',
+  'tablespoons', 'tablespoon', 'tbsp', 'teaspoons', 'teaspoon', 'tsp',
+  'grams', 'gram', 'kg', 'g', 'ml', 'l', 'liters', 'liter', 'quarts', 'quart', 'pints', 'pint',
+  'pieces', 'piece', 'cloves', 'clove', 'cans', 'can', 'packages', 'package', 'bunches', 'bunch',
+  'slices', 'slice', 'sprigs', 'sprig', 'stalks', 'stalk', 'heads', 'head',
+  'pinches', 'pinch', 'dashes', 'dash', 'thumbs', 'thumb'
+];
+const UNIT_RE = new RegExp(`^(${UNITS.join('|')})(?=\\s|$)\\.?\\s*`, 'i');
+// HelloFresh's placeholder for "a count of the thing itself": no unit.
+const PLACEHOLDER_UNIT_RE = /^(units?)(?=\s|$)\s*/i;
+// "(tsp) Cumin": an abbreviation that belongs to the unit, not the name.
+const PAREN_UNIT_RE = /^\(\s*(tsp|tbsp|oz|lb|lbs|g|kg|ml|l)\s*\)\s*/i;
+const PAREN_UNIT_FULL = {
+  tsp: 'teaspoon', tbsp: 'tablespoon', oz: 'ounce', lb: 'pound', lbs: 'pound',
+  g: 'gram', kg: 'kg', ml: 'ml', l: 'l'
+};
 
-  if (match) {
-    let amount = match[1]?.trim() || null;
+export function parseIngredientString(str) {
+  const raw = String(str ?? '').replace(/\s+/g, ' ').trim();
+  let rest = normalizeAmount(raw);
+  let amount = null;
+  let unit = null;
 
-    // Clean up amount - remove extra spaces around slashes
-    if (amount) {
-      amount = amount.replace(/\s*\/\s*/g, '/').trim();
-    }
-
-    return {
-      amount: amount,
-      unit: match[2] || null,
-      name: match[3]?.trim() || str
-    };
+  const q = rest.match(QUANTITY_RE);
+  if (q) {
+    amount = q[1].replace(/\s*\/\s*/g, '/').replace(/\s*(-|–|—)\s*/g, '-').replace(/\s+/g, ' ').trim();
+    rest = rest.slice(q[0].length).trim();
   }
 
-  return {
-    amount: null,
-    unit: null,
-    name: str
-  };
+  let m;
+  if (amount !== null && (m = rest.match(PLACEHOLDER_UNIT_RE))) {
+    rest = rest.slice(m[0].length);
+  } else if (amount !== null && (m = rest.match(UNIT_RE))) {
+    unit = m[1].toLowerCase();
+    rest = rest.slice(m[0].length);
+  } else if (!amount && (m = rest.match(/^(teaspoons?|tablespoons?|ounces?|pounds?)\s+(?=\()/i))) {
+    // "teaspoon (tsp) Cumin": unit with no amount
+    unit = m[1].toLowerCase();
+    rest = rest.slice(m[0].length);
+  }
+
+  if ((m = rest.match(PAREN_UNIT_RE))) {
+    if (!unit) unit = PAREN_UNIT_FULL[m[1].toLowerCase()];
+    rest = rest.slice(m[0].length);
+  }
+
+  rest = rest.trim();
+  if (!rest) {
+    // Nothing left for a name: the unit word was the name (or the line is blank).
+    if (unit && amount !== null) return { amount, unit: null, name: unit };
+    return { amount: null, unit: null, name: raw };
+  }
+  return { amount, unit, name: rest };
+}
+
+/**
+ * One direction string to clean steps. Strips the leading "• " bullet and
+ * rejoins lines the card hard-wrapped, while keeping real boundaries: blank
+ * lines, a bullet at the start of a line and "1." style numbering each start a
+ * new step.
+ */
+export function cleanDirection(text) {
+  const normalized = String(text ?? '').replace(/\r\n?/g, '\n');
+  return normalized
+    .split(/\n[ \t]*\n|\n[ \t]*[•●▪‣][ \t]*|\n[ \t]*\d{1,2}[.)][ \t]+/)
+    .map((part) => part.replace(/^[\s•●▪‣]+/, '').replace(/^\d{1,2}[.)]\s+/, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function cleanDirections(list) {
+  return list.flatMap(cleanDirection);
 }
 
 function parseDuration(iso8601) {
@@ -203,40 +259,24 @@ function toTitleCase(str) {
     .join(' ');
 }
 
-// Get time-based tag
-function getTimeTag(totalMinutes) {
-  if (!totalMinutes || totalMinutes <= 0) return null;
-  if (totalMinutes <= 15) return '15 Minutes';
-  if (totalMinutes <= 30) return '30 Minutes';
-  if (totalMinutes <= 45) return '45 Minutes';
-  if (totalMinutes <= 60) return '1 Hour';
-  return '1 Hour+';
+/** First non-empty string of a schema.org string-or-array field, Title-Cased. */
+function firstText(value) {
+  const first = Array.isArray(value) ? value.find((v) => typeof v === 'string' && v.trim()) : value;
+  return typeof first === 'string' && first.trim() ? toTitleCase(first.trim()) : null;
 }
 
-function generateTags(title, ingredients, cuisine, category, totalTime = null) {
+/**
+ * Tags from the title and ingredients, plus the facts that are columns.
+ * Time-bucket, cuisine, category and 'Vegetarian' tags are no longer emitted
+ * (COOK-6): total time, category, cuisine and vegetarian are columns. Protein
+ * and dish-type tags stay. The old 'Mexican' / 'Asian' style tags are cuisines,
+ * so they come back as `cuisine`, not as tags.
+ */
+function detectTags(title, ingredients) {
   const tags = new Set();
   const titleLower = (title || '').toLowerCase();
   const ingredientNames = ingredients.map(i => i.name.toLowerCase()).join(' ');
-
-  // Time-based tag
-  const timeTag = getTimeTag(totalTime);
-  if (timeTag) {
-    tags.add(timeTag);
-  }
-
-  // Cuisine tags
-  if (cuisine) {
-    tags.add(toTitleCase(cuisine));
-  }
-
-  // Category tags
-  if (category) {
-    if (Array.isArray(category)) {
-      category.forEach(c => tags.add(toTitleCase(c)));
-    } else {
-      tags.add(toTitleCase(category));
-    }
-  }
+  let cuisine = null;
 
   // Protein detection
   if (titleLower.includes('chicken') || ingredientNames.includes('chicken')) {
@@ -253,10 +293,7 @@ function generateTags(title, ingredients, cuisine, category, totalTime = null) {
     tags.add('Seafood');
   }
 
-  // Style detection
-  if (titleLower.includes('vegetarian') || titleLower.includes('veggie')) {
-    tags.add('Vegetarian');
-  }
+  // Dish-type detection
   if (titleLower.includes('bowl')) {
     tags.add('Bowl');
   }
@@ -266,12 +303,16 @@ function generateTags(title, ingredients, cuisine, category, totalTime = null) {
   if (titleLower.includes('pasta') || titleLower.includes('spaghetti')) {
     tags.add('Pasta');
   }
+
+  // Style detection that is really cuisine
   if (titleLower.includes('taco') || titleLower.includes('burrito')) {
-    tags.add('Mexican');
+    cuisine = 'Mexican';
   }
   if (titleLower.includes('stir fry') || titleLower.includes('teriyaki') || titleLower.includes('asian')) {
-    tags.add('Asian');
+    cuisine = cuisine || 'Asian';
   }
 
-  return Array.from(tags).slice(0, 6); // Limit to 6 tags (increased to accommodate time tag)
+  const vegetarian = titleLower.includes('vegetarian') || titleLower.includes('veggie');
+
+  return { tags: Array.from(tags), cuisine, vegetarian };
 }

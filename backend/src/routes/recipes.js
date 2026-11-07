@@ -1,69 +1,23 @@
 import { Router } from 'express';
+import { recipeInclude, presentRecipe } from '../services/recipeShape.js';
+import {
+  HttpError,
+  normalizeSource,
+  processTags,
+  tagConnect,
+  prepareDirections,
+  prepareIngredients,
+  scalarData,
+  resolveContributorId
+} from '../services/recipeWrite.js';
 
 const router = Router();
 
-// Normalize Unicode fractions to ASCII
-function normalizeFractions(str) {
-  if (!str) return str;
-  return str
-    .replace(/¼/g, '1/4')
-    .replace(/½/g, '1/2')
-    .replace(/¾/g, '3/4')
-    .replace(/⅓/g, '1/3')
-    .replace(/⅔/g, '2/3')
-    .replace(/⅛/g, '1/8')
-    .replace(/⅜/g, '3/8')
-    .replace(/⅝/g, '5/8')
-    .replace(/⅞/g, '7/8');
-}
-
-// Normalize ingredient amounts
-function normalizeIngredient(ing) {
-  return {
-    name: ing.name,
-    amount: normalizeFractions(ing.amount),
-    unit: ing.unit
-  };
-}
-
-// Convert string to Title Case
-function toTitleCase(str) {
-  return str
-    .toLowerCase()
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
-// Get time-based tag
-function getTimeTag(totalMinutes) {
-  if (!totalMinutes || totalMinutes <= 0) return null;
-  if (totalMinutes <= 15) return '15 Minutes';
-  if (totalMinutes <= 30) return '30 Minutes';
-  if (totalMinutes <= 45) return '45 Minutes';
-  if (totalMinutes <= 60) return '1 Hour';
-  return '1 Hour+';
-}
-
-// Normalize and augment tags
-function processTags(tags, prepTime, cookTime) {
-  const normalizedTags = (tags || []).map(tag => toTitleCase(tag.trim()));
-
-  // Add time-based tag if not already present
-  const totalTime = (prepTime || 0) + (cookTime || 0);
-  const timeTag = getTimeTag(totalTime);
-  if (timeTag && !normalizedTags.includes(timeTag)) {
-    normalizedTags.unshift(timeTag);
-  }
-
-  // Remove duplicates
-  return [...new Set(normalizedTags)];
-}
-
-// List all recipes with optional tag filter
+// List all recipes with optional tag filter. Default order is updatedAt;
+// ?sort=createdAt gives "Recently added".
 router.get('/', async (req, res, next) => {
   try {
-    const { tag } = req.query;
+    const { tag, sort } = req.query;
 
     const where = tag ? {
       tags: { some: { name: { equals: tag, mode: 'insensitive' } } }
@@ -71,15 +25,11 @@ router.get('/', async (req, res, next) => {
 
     const recipes = await req.prisma.recipe.findMany({
       where,
-      include: {
-        ingredients: true,
-        directions: { orderBy: { stepNumber: 'asc' } },
-        tags: true
-      },
-      orderBy: { updatedAt: 'desc' }
+      include: recipeInclude,
+      orderBy: sort === 'createdAt' ? { createdAt: 'desc' } : { updatedAt: 'desc' }
     });
 
-    res.json(recipes);
+    res.json(recipes.map(presentRecipe));
   } catch (error) {
     next(error);
   }
@@ -90,18 +40,14 @@ router.get('/:id', async (req, res, next) => {
   try {
     const recipe = await req.prisma.recipe.findUnique({
       where: { id: req.params.id },
-      include: {
-        ingredients: true,
-        directions: { orderBy: { stepNumber: 'asc' } },
-        tags: true
-      }
+      include: recipeInclude
     });
 
     if (!recipe) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
 
-    res.json(recipe);
+    res.json(presentRecipe(recipe));
   } catch (error) {
     next(error);
   }
@@ -110,98 +56,69 @@ router.get('/:id', async (req, res, next) => {
 // Create recipe
 router.post('/', async (req, res, next) => {
   try {
-    const { title, description, imageUrl, servings, prepTime, cookTime, source, sourceUrl, ingredients, directions, tags } = req.body;
-
-    // Process tags: normalize casing and add time tag
-    const processedTags = processTags(tags, prepTime, cookTime);
+    const body = req.body;
+    const tags = processTags(body.tags);
+    const contributorId = await resolveContributorId(req.prisma, body.contributorId);
 
     const recipe = await req.prisma.recipe.create({
       data: {
-        title,
-        description,
-        imageUrl,
-        servings,
-        prepTime,
-        cookTime,
-        source: source || 'manual',
-        sourceUrl,
-        ingredients: {
-          create: ingredients?.map(normalizeIngredient) || []
-        },
-        directions: {
-          create: directions?.map((dir, index) => ({
-            stepNumber: index + 1,
-            instruction: typeof dir === 'string' ? dir : dir.instruction
-          })) || []
-        },
-        tags: {
-          connectOrCreate: processedTags.map(tag => ({
-            where: { name: tag },
-            create: { name: tag }
-          }))
-        }
+        ...scalarData(body),
+        source: normalizeSource(body.source),
+        contributorId,
+        ingredients: { create: prepareIngredients(body.ingredients || []) },
+        directions: { create: prepareDirections(body.directions || []) },
+        tags: { connectOrCreate: tagConnect(tags || []) }
       },
-      include: {
-        ingredients: true,
-        directions: { orderBy: { stepNumber: 'asc' } },
-        tags: true
-      }
+      include: recipeInclude
     });
 
-    res.status(201).json(recipe);
+    res.status(201).json(presentRecipe(recipe));
   } catch (error) {
     next(error);
   }
 });
 
-// Update recipe
+// Update recipe: a partial update in one transaction. Omitted fields are
+// unchanged; ingredients, directions and tags are replaced only when supplied.
 router.put('/:id', async (req, res, next) => {
   try {
-    const { title, description, imageUrl, servings, prepTime, cookTime, source, sourceUrl, ingredients, directions, tags } = req.body;
+    const body = req.body;
+    const tags = processTags(body.tags);
 
-    // Process tags: normalize casing and add time tag
-    const processedTags = processTags(tags, prepTime, cookTime);
+    const recipe = await req.prisma.$transaction(async (tx) => {
+      const existing = await tx.recipe.findUnique({
+        where: { id: req.params.id },
+        include: { directions: true }
+      });
+      if (!existing) throw new HttpError(404, 'Recipe not found');
 
-    // Delete existing ingredients and directions
-    await req.prisma.ingredient.deleteMany({ where: { recipeId: req.params.id } });
-    await req.prisma.direction.deleteMany({ where: { recipeId: req.params.id } });
-
-    const recipe = await req.prisma.recipe.update({
-      where: { id: req.params.id },
-      data: {
-        title,
-        description,
-        imageUrl,
-        servings,
-        prepTime,
-        cookTime,
-        source,
-        sourceUrl,
-        ingredients: {
-          create: ingredients?.map(normalizeIngredient) || []
-        },
-        directions: {
-          create: directions?.map((dir, index) => ({
-            stepNumber: index + 1,
-            instruction: typeof dir === 'string' ? dir : dir.instruction
-          })) || []
-        },
-        tags: {
-          set: [],
-          connectOrCreate: processedTags.map(tag => ({
-            where: { name: tag },
-            create: { name: tag }
-          }))
-        }
-      },
-      include: {
-        ingredients: true,
-        directions: { orderBy: { stepNumber: 'asc' } },
-        tags: true
+      const data = scalarData(body, existing);
+      if (body.source !== undefined) data.source = normalizeSource(body.source);
+      if (body.contributorId !== undefined) {
+        if (body.contributorId === null) throw new HttpError(400, 'contributorId cannot be cleared');
+        data.contributorId = await resolveContributorId(tx, body.contributorId);
       }
+
+      if (body.ingredients !== undefined) {
+        await tx.ingredient.deleteMany({ where: { recipeId: existing.id } });
+        data.ingredients = { create: prepareIngredients(body.ingredients) };
+      }
+      if (body.directions !== undefined) {
+        await tx.direction.deleteMany({ where: { recipeId: existing.id } });
+        data.directions = { create: prepareDirections(body.directions, existing.directions) };
+      }
+      if (tags !== undefined) {
+        data.tags = { set: [], connectOrCreate: tagConnect(tags) };
+      }
+
+      return tx.recipe.update({
+        where: { id: existing.id },
+        data,
+        include: recipeInclude
+      });
     });
 
-    res.json(recipe);
+    res.json(presentRecipe(recipe));
   } catch (error) {
     next(error);
   }

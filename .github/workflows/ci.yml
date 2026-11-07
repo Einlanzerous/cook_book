@@ -34,9 +34,63 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # A skipped DB-backed test is a failure here, not a pass.
+      COOK_REQUIRE_DB: "1"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # Trust auth, no password in this file. Loopback-only below.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: cook_book_test
+        # Loopback, Docker-assigned host port (job.services.postgres.ports);
+        # fixed numbers collide with other Postgres instances on shared runners.
+        ports:
+          - "127.0.0.1::5432"
+        # tmpfs over PGDATA so the job does not leak an anonymous volume per run.
+        options: >-
+          --mount type=tmpfs,destination=/var/lib/postgresql/data,tmpfs-size=1g
+          --health-cmd "pg_isready -U postgres -d cook_book_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Point COOK_TEST_DATABASE_URL at this job's Postgres
+        env:
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+        run: |
+          test -n "$PGPORT" || { echo "service port not assigned"; exit 1; }
+          echo "COOK_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:${PGPORT}/cook_book_test" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: make test
+
   build:
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [validate, test]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

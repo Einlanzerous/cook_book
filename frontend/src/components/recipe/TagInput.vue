@@ -65,18 +65,18 @@ function handleBlur() {
 
 <template>
   <div class="relative">
-    <div class="flex flex-wrap gap-2 p-2 border border-gray-300 rounded-md bg-white focus-within:ring-1 focus-within:ring-orange-500 focus-within:border-orange-500">
+    <div class="flex flex-wrap gap-2 p-2 border border-rule-strong rounded-md bg-surface focus-within:ring-1 focus-within:ring-fir focus-within:border-fir">
       <!-- Existing tags -->
       <span
         v-for="(tag, index) in modelValue"
         :key="tag"
-        class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-700"
+        class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-fir-tint text-fir"
       >
         {{ tag }}
         <button
           type="button"
           @click="removeTag(index)"
-          class="ml-1 inline-flex items-center justify-center w-4 h-4 text-orange-400 hover:text-orange-600"
+          class="ml-1 inline-flex items-center justify-center w-4 h-4 text-fir hover:text-fir-dark"
         >
           <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -99,17 +99,17 @@ function handleBlur() {
     <!-- Suggestions dropdown -->
     <div
       v-if="showSuggestions && suggestions.length"
-      class="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg border border-gray-200"
+      class="absolute z-10 mt-1 w-full bg-surface rounded-md shadow-lg border border-rule"
     >
       <ul class="py-1">
         <li
           v-for="suggestion in suggestions"
           :key="suggestion.id"
           @mousedown.prevent="addTag(suggestion.name)"
-          class="px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 cursor-pointer"
+          class="px-3 py-2 text-sm text-ink-soft hover:bg-fir-tint hover:text-fir-dark cursor-pointer"
         >
           {{ suggestion.name }}
-          <span class="text-gray-400 text-xs ml-1">({{ suggestion.recipeCount }} recipes)</span>
+          <span class="text-faint text-xs ml-1">({{ suggestion.recipeCount }} recipes)</span>
         </li>
       </ul>
     </div>

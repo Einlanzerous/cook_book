@@ -1,306 +1,223 @@
+/**
+ * Development seed: the Commonplace canvas sample data (six cooks, ten recipes
+ * from HelloFresh, NYT Cooking, Grandma Ada's cards and "Added via Claude").
+ *
+ *   make db-seed                 fresh database only
+ *   make db-seed-force           wipe recipes/contributors/tags first
+ *   node prisma/seed.js --force  the same, by hand
+ *
+ * THIS SCRIPT DELETES DATA. It refuses to run (non-zero exit, nothing deleted):
+ *   - when NODE_ENV=production, always (`--force` does NOT override this);
+ *   - when the database already holds any Recipe, or any Contributor other than
+ *     the default 'magos' (the migration creates that one), unless `--force`.
+ * NODE_ENV is not set in the Dockerfile, so the second rule is the real
+ * protection against pointing this at a database with real recipes in it.
+ *
+ * 'magos' is recreated among the cooks: the API falls back to it when a create
+ * carries no contributorId.
+ */
+import { pathToFileURL } from 'node:url';
 import { PrismaClient } from '@prisma/client';
+import { prepareIngredient } from '../src/services/quantity.js';
+import { toTitleCase, DEFAULT_CONTRIBUTOR_NAME } from '../src/services/recipeWrite.js';
 
-const prisma = new PrismaClient();
+export const COOKS = [
+  { key: 'magos', name: DEFAULT_CONTRIBUTOR_NAME, bio: 'Keeps the house cookbook running.', joinedAt: '2026-01-05T10:00:00Z' },
+  { key: 'mara', name: 'Mara Okafor', bio: "Weeknight bowls, and her grandmother's recipe cards.", joinedAt: '2026-02-03T18:00:00Z' },
+  { key: 'theo', name: 'Theo Brandt', bio: 'Pasta on Tuesdays, shrimp on Fridays.', joinedAt: '2026-02-20T18:00:00Z' },
+  { key: 'ines', name: 'Ines Rojas', bio: 'Noodles, stir fries, anything under 30 minutes.', joinedAt: '2026-03-02T18:00:00Z' },
+  { key: 'sam', name: 'Sam Kim', bio: 'Cuts recipes out of the Sunday paper.', joinedAt: '2026-03-15T18:00:00Z' },
+  { key: 'wren', name: 'Wren Ellis', bio: 'Newest cook; no recipes filed yet.', joinedAt: '2026-04-01T18:00:00Z' }
+];
 
-// Get time-based tag
-function getTimeTag(totalMinutes) {
-  if (!totalMinutes || totalMinutes <= 0) return null;
-  if (totalMinutes <= 15) return '15 Minutes';
-  if (totalMinutes <= 30) return '30 Minutes';
-  if (totalMinutes <= 45) return '45 Minutes';
-  if (totalMinutes <= 60) return '1 Hour';
-  return '1 Hour+';
-}
+const HF = 'HelloFresh';
+const ADA = 'Grandma Ada’s card';
+const NYT = 'NYT Cooking';
+const CLAUDE = 'Added via Claude';
 
-const sampleRecipes = [
+// amount/unit are display text; quantity is derived by the same write-path
+// helper the API uses. '1 thumb' (quantity NULL) and a blank-amount
+// 'Salt & pepper' are the COOK-9 edge cases.
+const ing = (amount, unit, name) => ({ amount: amount || null, unit: unit || null, name });
+const step = (heading, instruction) => ({ heading, instruction });
+
+// Tags are protein / dish-type only: cuisine, category, time and vegetarian
+// live in columns (COOK-6), never in tags.
+export const RECIPES = [
   {
-    title: 'Teriyaki Chicken Bowl',
-    description: 'A delicious Japanese-inspired bowl with tender chicken, steamed rice, and fresh vegetables drizzled with homemade teriyaki sauce.',
-    imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800',
-    servings: 4,
-    prepTime: 15,
-    cookTime: 20,
-    tags: ['Japanese', 'Quick', 'Chicken', 'Bowl'],
+    title: 'Beef & Zucchini Bibimbap with Carrots & Pickled Scallions',
+    description: "Named for the Korean word for mixing rice — which is exactly what you do once it's served. Sweet carrot ribbons, tender zucchini, and beef tossed with garlic, ginger, and soy.",
+    cook: 'mara', source: HF, sourceUrl: 'https://www.hellofresh.com/recipes/beef-zucchini-bibimbap-example',
+    category: 'Main course', cuisine: 'Korean', servings: 2, prepTime: 10, cookTime: 20, estimated: true,
+    vegetarian: false, createdAt: '2026-03-12T09:30:00Z',
+    notes: 'Swap in chicken for beef — pat dry, cook through, no need to break it up.',
+    tags: ['Beef', 'Bowl'],
     ingredients: [
-      { name: 'chicken breast', amount: '1.5', unit: 'lb' },
-      { name: 'soy sauce', amount: '1/4', unit: 'cup' },
-      { name: 'honey', amount: '2', unit: 'tbsp' },
-      { name: 'rice vinegar', amount: '1', unit: 'tbsp' },
-      { name: 'sesame oil', amount: '1', unit: 'tsp' },
-      { name: 'garlic', amount: '3', unit: 'cloves' },
-      { name: 'ginger', amount: '1', unit: 'tbsp' },
-      { name: 'jasmine rice', amount: '2', unit: 'cups' },
-      { name: 'broccoli', amount: '2', unit: 'cups' },
-      { name: 'sesame seeds', amount: '1', unit: 'tbsp' }
+      ing('¾', 'cup', 'Jasmine rice'), ing('2', null, 'Scallions'), ing('6', 'oz', 'Carrots'), ing('1', null, 'Zucchini'),
+      ing('1 thumb', null, 'Ginger'), ing('1', 'clove', 'Garlic'), ing('5', 'tsp', 'White wine vinegar'),
+      ing('1', 'tbsp', 'Sesame oil'), ing('½', 'oz', 'Gochujang'), ing('2', 'tbsp', 'Soy sauce'),
+      ing('10', 'oz', 'Ground beef'), ing('1', 'tbsp', 'Sugar'), ing('1', 'tbsp', 'Cooking oil'), ing('', null, 'Salt & pepper')
     ],
     directions: [
-      'Cook jasmine rice according to package directions.',
-      'Mix soy sauce, honey, rice vinegar, sesame oil, minced garlic, and grated ginger in a bowl for the teriyaki sauce.',
-      'Cut chicken breast into bite-sized pieces and season with salt and pepper.',
-      'Heat a large skillet over medium-high heat. Cook chicken until golden and cooked through, about 6-7 minutes.',
-      'Pour teriyaki sauce over chicken and simmer for 2-3 minutes until sauce thickens.',
-      'Steam broccoli until tender-crisp, about 4 minutes.',
-      'Serve chicken and broccoli over rice, drizzle with extra sauce and sprinkle with sesame seeds.'
+      step('Cook the rice', 'In a small pot, combine rice, 1¼ cups water (2½ for 4) and a big pinch of salt. Boil, then cover and simmer until tender, 15–18 minutes. Keep covered off heat.'),
+      step('Prep', 'Thinly slice scallions, separating whites from greens. Peel carrots and shave into ribbons, rotating as you go. Halve zucchini lengthwise and slice into half-moons. Mince ginger and garlic.'),
+      step('Pickle & mix the sauce', 'Combine scallion whites, vinegar and a pinch of salt; set aside. In another bowl, stir sesame oil, gochujang, half the soy sauce and 1 tbsp sugar (2 for 4) until dissolved.'),
+      step('Cook the vegetables', 'Heat a drizzle of oil over medium-high. Cook carrots until slightly softened, 3–4 minutes; set aside. Repeat with zucchini until browned, 3–5 minutes per side.'),
+      step('Cook the beef', 'Heat more oil in the same pan. Add beef, ginger and garlic; cook, breaking up, until browned, 4–6 minutes. Add remaining soy sauce and cook until mostly evaporated, 1–2 minutes.'),
+      step('Serve', 'Fluff rice and divide between bowls. Top with beef and vegetables, pickled scallions and their liquid, the sauce, and scallion greens.')
     ]
   },
   {
-    title: 'One-Pan Lemon Herb Salmon',
-    description: 'Flaky salmon fillets roasted with asparagus and cherry tomatoes in a bright lemon herb sauce. Ready in under 30 minutes!',
-    imageUrl: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800',
-    servings: 2,
-    prepTime: 10,
-    cookTime: 20,
-    tags: ['One Pan', 'Seafood', 'Healthy', 'Quick'],
-    ingredients: [
-      { name: 'salmon fillets', amount: '2', unit: 'pieces' },
-      { name: 'asparagus', amount: '1', unit: 'bunch' },
-      { name: 'cherry tomatoes', amount: '1', unit: 'cup' },
-      { name: 'lemon', amount: '1', unit: 'piece' },
-      { name: 'olive oil', amount: '3', unit: 'tbsp' },
-      { name: 'garlic', amount: '4', unit: 'cloves' },
-      { name: 'fresh dill', amount: '2', unit: 'tbsp' },
-      { name: 'fresh parsley', amount: '2', unit: 'tbsp' }
-    ],
-    directions: [
-      'Preheat oven to 400°F (200°C).',
-      'Trim asparagus and halve cherry tomatoes. Arrange on a baking sheet.',
-      'Drizzle vegetables with olive oil, season with salt and pepper.',
-      'Place salmon fillets on top of the vegetables.',
-      'Mix remaining olive oil with minced garlic, lemon juice, dill, and parsley. Spoon over salmon.',
-      'Roast for 15-18 minutes until salmon is cooked through and flakes easily.',
-      'Serve immediately with lemon wedges.'
-    ]
+    title: 'Chicken & Mushroom Truffle Pasta', cook: 'theo', source: HF, sourceUrl: 'https://www.hellofresh.com/recipes/truffle-pasta-example',
+    description: 'Creamy, earthy pasta that comes together in one pan.',
+    category: 'Main course', cuisine: 'Italian', servings: 2, prepTime: 7, cookTime: 13, estimated: true, vegetarian: false,
+    createdAt: '2026-03-10T18:00:00Z', tags: ['Chicken', 'Pasta'],
+    ingredients: [ing('6', 'oz', 'Rigatoni'), ing('8', 'oz', 'Chicken breast'), ing('6', 'oz', 'Mushrooms'), ing('2', 'tbsp', 'Truffle butter'), ing('¼', 'cup', 'Parmesan')],
+    directions: [step('Boil', 'Boil the pasta in salted water until al dente; save a mug of the water.'), step('Sear', 'Sear sliced chicken and mushrooms until golden.'), step('Toss', 'Toss everything with truffle butter, Parmesan and a splash of pasta water.')]
   },
   {
-    title: 'Classic Beef Tacos',
-    description: 'Seasoned ground beef in warm tortillas topped with fresh pico de gallo, cheese, and all your favorite toppings.',
-    imageUrl: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=800',
-    servings: 4,
-    prepTime: 15,
-    cookTime: 15,
-    tags: ['Mexican', 'Quick', 'Beef'],
-    ingredients: [
-      { name: 'ground beef', amount: '1', unit: 'lb' },
-      { name: 'taco seasoning', amount: '2', unit: 'tbsp' },
-      { name: 'corn tortillas', amount: '8', unit: 'pieces' },
-      { name: 'Roma tomatoes', amount: '3', unit: 'pieces' },
-      { name: 'white onion', amount: '1/2', unit: 'piece' },
-      { name: 'fresh cilantro', amount: '1/4', unit: 'cup' },
-      { name: 'lime', amount: '2', unit: 'pieces' },
-      { name: 'cheddar cheese', amount: '1', unit: 'cup' },
-      { name: 'sour cream', amount: '1/2', unit: 'cup' }
-    ],
-    directions: [
-      'Brown ground beef in a large skillet over medium-high heat, breaking it up as it cooks.',
-      'Drain excess fat and add taco seasoning with 1/4 cup water. Simmer for 5 minutes.',
-      'Make pico de gallo: dice tomatoes and onion, chop cilantro, mix with lime juice and salt.',
-      'Warm tortillas in a dry skillet or directly over gas flame.',
-      'Assemble tacos with seasoned beef, pico de gallo, shredded cheese, and sour cream.',
-      'Serve with lime wedges on the side.'
-    ]
+    title: 'Homestyle Chicken & Biscuit Pie', cook: 'mara', source: HF, sourceUrl: 'https://www.hellofresh.com/recipes/biscuit-pie-example',
+    description: 'A skillet pot pie with a drop-biscuit lid.',
+    category: 'Main course', cuisine: 'American', servings: 2, prepTime: 15, cookTime: 30, estimated: true, vegetarian: false,
+    createdAt: '2026-03-08T18:00:00Z', tags: ['Chicken'],
+    ingredients: [ing('10', 'oz', 'Chicken thigh'), ing('1', 'cup', 'Frozen peas and carrots'), ing('1½', 'cups', 'Chicken stock'), ing('4', null, 'Biscuit rounds')],
+    directions: [step('Simmer', 'Brown the chicken, add vegetables and stock, simmer until thick.'), step('Top and bake', 'Arrange biscuits on top and bake until risen and golden.')]
   },
   {
-    title: 'Vegetable Stir Fry',
-    description: 'A colorful medley of crisp vegetables in a savory ginger-garlic sauce. Perfect as a main dish or side.',
-    imageUrl: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=800',
-    servings: 4,
-    prepTime: 15,
-    cookTime: 10,
-    tags: ['Vegetarian', 'Quick', 'Asian', 'Healthy'],
-    ingredients: [
-      { name: 'broccoli florets', amount: '2', unit: 'cups' },
-      { name: 'bell peppers', amount: '2', unit: 'pieces' },
-      { name: 'snap peas', amount: '1', unit: 'cup' },
-      { name: 'carrots', amount: '2', unit: 'pieces' },
-      { name: 'mushrooms', amount: '8', unit: 'oz' },
-      { name: 'soy sauce', amount: '3', unit: 'tbsp' },
-      { name: 'sesame oil', amount: '2', unit: 'tbsp' },
-      { name: 'garlic', amount: '4', unit: 'cloves' },
-      { name: 'fresh ginger', amount: '1', unit: 'tbsp' },
-      { name: 'cornstarch', amount: '1', unit: 'tsp' }
-    ],
-    directions: [
-      'Cut all vegetables into bite-sized pieces. Slice carrots on the diagonal.',
-      'Mix soy sauce, sesame oil, minced garlic, grated ginger, and cornstarch in a small bowl.',
-      'Heat a wok or large skillet over high heat until smoking.',
-      'Add vegetables in order of density: carrots first, then broccoli, peppers, mushrooms, and snap peas.',
-      'Stir-fry for 4-5 minutes until vegetables are tender-crisp.',
-      'Pour sauce over vegetables and toss to coat. Cook 1 more minute.',
-      'Serve immediately over rice or noodles.'
-    ]
+    title: 'Creamy Mushroom Chowder', cook: 'mara', source: ADA,
+    description: "From Grandma Ada's recipe card, copied word for word.",
+    category: 'Soup', cuisine: 'American', servings: 4, prepTime: 5, cookTime: 10, vegetarian: true,
+    createdAt: '2026-03-05T18:00:00Z', tags: ['Comfort Food'], notes: 'Better the next day.',
+    ingredients: [ing('1', 'lb', 'Mushrooms'), ing('2', 'tbsp', 'Butter'), ing('2', 'cups', 'Milk'), ing('1', null, 'Potato'), ing('', null, 'Salt & pepper')],
+    directions: [step(null, 'Sauté the mushrooms in butter.'), step(null, 'Add diced potato and milk; simmer until tender, then blend half.')]
   },
   {
-    title: 'Creamy Tuscan Chicken',
-    description: 'Pan-seared chicken breasts in a rich sun-dried tomato and spinach cream sauce. Restaurant quality at home!',
-    imageUrl: 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=800',
-    servings: 4,
-    prepTime: 10,
-    cookTime: 25,
-    tags: ['Italian', 'One Pan', 'Chicken'],
-    ingredients: [
-      { name: 'chicken breasts', amount: '4', unit: 'pieces' },
-      { name: 'heavy cream', amount: '1', unit: 'cup' },
-      { name: 'parmesan cheese', amount: '1/2', unit: 'cup' },
-      { name: 'sun-dried tomatoes', amount: '1/2', unit: 'cup' },
-      { name: 'fresh spinach', amount: '3', unit: 'cups' },
-      { name: 'garlic', amount: '4', unit: 'cloves' },
-      { name: 'Italian seasoning', amount: '1', unit: 'tsp' },
-      { name: 'olive oil', amount: '2', unit: 'tbsp' },
-      { name: 'chicken broth', amount: '1/2', unit: 'cup' }
-    ],
-    directions: [
-      'Pound chicken breasts to even thickness. Season with salt, pepper, and Italian seasoning.',
-      'Heat olive oil in a large skillet over medium-high heat. Sear chicken 6-7 minutes per side until golden and cooked through. Set aside.',
-      'In the same pan, sauté minced garlic for 30 seconds until fragrant.',
-      'Add sun-dried tomatoes and chicken broth. Simmer for 2 minutes.',
-      'Reduce heat and stir in heavy cream and parmesan cheese. Simmer until slightly thickened.',
-      'Add spinach and stir until wilted.',
-      'Return chicken to the pan and spoon sauce over it. Serve with pasta or crusty bread.'
-    ]
+    title: 'Chicken Ramen in Shoyu Broth', cook: 'ines', source: HF, sourceUrl: 'https://www.hellofresh.com/recipes/chicken-ramen-example',
+    description: 'A quick shoyu broth with soft egg and scallions.',
+    category: 'Soup', cuisine: 'Japanese', servings: 2, prepTime: 15, cookTime: 30, estimated: true, vegetarian: false,
+    createdAt: '2026-03-01T18:00:00Z', tags: ['Chicken', 'Noodles'],
+    ingredients: [ing('2', null, 'Ramen nests'), ing('2', 'cups', 'Chicken broth'), ing('2', 'tbsp', 'Soy sauce'), ing('2', null, 'Eggs'), ing('1', 'thumb', 'Ginger')],
+    directions: [step('Broth', 'Simmer broth with soy and ginger.'), step('Noodles', 'Cook noodles separately, then combine in bowls.'), step('Top', 'Top with halved soft eggs and scallions.')]
   },
   {
-    title: 'Thai Basil Fried Rice',
-    description: 'Aromatic fried rice with Thai basil, vegetables, and a perfectly fried egg on top. Sweet, salty, and a little spicy!',
-    imageUrl: 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800',
-    servings: 2,
-    prepTime: 10,
-    cookTime: 15,
-    tags: ['Thai', 'Quick', 'Asian'],
-    ingredients: [
-      { name: 'cooked jasmine rice', amount: '3', unit: 'cups' },
-      { name: 'Thai basil leaves', amount: '1', unit: 'cup' },
-      { name: 'eggs', amount: '3', unit: 'pieces' },
-      { name: 'garlic', amount: '4', unit: 'cloves' },
-      { name: 'Thai chilies', amount: '2', unit: 'pieces' },
-      { name: 'fish sauce', amount: '2', unit: 'tbsp' },
-      { name: 'soy sauce', amount: '1', unit: 'tbsp' },
-      { name: 'sugar', amount: '1', unit: 'tsp' },
-      { name: 'vegetable oil', amount: '3', unit: 'tbsp' },
-      { name: 'onion', amount: '1', unit: 'piece' }
-    ],
-    directions: [
-      'Use day-old rice for best results, or spread fresh rice on a sheet pan to cool.',
-      'Mince garlic and Thai chilies. Slice onion thinly.',
-      'Heat 2 tbsp oil in a wok over high heat. Scramble 1 egg, break into pieces, set aside.',
-      'Add remaining oil. Stir-fry garlic and chilies for 30 seconds.',
-      'Add onion and cook for 1 minute. Add rice and toss continuously.',
-      'Season with fish sauce, soy sauce, and sugar. Toss well.',
-      'Add scrambled egg and Thai basil. Toss until basil wilts.',
-      'Fry remaining eggs sunny-side up. Serve rice topped with fried eggs.'
-    ]
+    title: 'Lemony Herbed Chicken & Couscous', cook: 'sam', source: NYT, sourceUrl: 'https://cooking.nytimes.com/recipes/example-lemony-chicken',
+    description: 'Bright, herby, and on the table in 20 minutes.',
+    category: 'Main course', cuisine: 'Mediterranean', servings: 2, prepTime: 8, cookTime: 12, vegetarian: false,
+    createdAt: '2026-02-24T18:00:00Z', tags: ['Chicken'],
+    ingredients: [ing('2', null, 'Chicken cutlets'), ing('1', 'cup', 'Pearl couscous'), ing('1', null, 'Lemon'), ing('¼', 'cup', 'Chopped herbs')],
+    directions: [step('Cook the couscous', 'Toast, then simmer the couscous in water.'), step('Cook the chicken', 'Pan-fry the cutlets, finish with lemon and herbs.')]
   },
   {
-    title: 'Mediterranean Quinoa Salad',
-    description: 'A refreshing grain salad with cucumber, tomatoes, olives, and feta cheese in a lemon herb vinaigrette.',
-    imageUrl: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?w=800',
-    servings: 6,
-    prepTime: 20,
-    cookTime: 15,
-    tags: ['Healthy', 'Vegetarian', 'Mediterranean', 'Salad'],
-    ingredients: [
-      { name: 'quinoa', amount: '1.5', unit: 'cups' },
-      { name: 'cucumber', amount: '1', unit: 'large' },
-      { name: 'cherry tomatoes', amount: '2', unit: 'cups' },
-      { name: 'kalamata olives', amount: '1/2', unit: 'cup' },
-      { name: 'feta cheese', amount: '1', unit: 'cup' },
-      { name: 'red onion', amount: '1/2', unit: 'piece' },
-      { name: 'fresh parsley', amount: '1/2', unit: 'cup' },
-      { name: 'lemon juice', amount: '1/4', unit: 'cup' },
-      { name: 'olive oil', amount: '1/3', unit: 'cup' },
-      { name: 'dried oregano', amount: '1', unit: 'tsp' }
-    ],
-    directions: [
-      'Rinse quinoa and cook according to package directions. Spread on a sheet pan to cool.',
-      'Dice cucumber, halve cherry tomatoes, slice olives, and dice red onion.',
-      'Whisk together olive oil, lemon juice, oregano, salt, and pepper for the dressing.',
-      'In a large bowl, combine cooled quinoa with all vegetables.',
-      'Pour dressing over salad and toss to combine.',
-      'Crumble feta cheese on top and garnish with fresh parsley.',
-      'Serve immediately or refrigerate. Flavors improve after an hour.'
-    ]
+    title: 'Tuscan Beef-Stuffed Peppers', cook: 'mara', source: ADA,
+    description: 'Another of Grandma Ada’s cards, scaled up for a crowd.',
+    category: 'Main course', cuisine: 'Italian', servings: 4, prepTime: 15, cookTime: 20, vegetarian: false,
+    createdAt: '2026-02-18T18:00:00Z', tags: ['Beef'],
+    ingredients: [ing('4', null, 'Bell peppers'), ing('1', 'lb', 'Ground beef'), ing('1½', 'cups', 'Cooked rice'), ing('1', 'cup', 'Tomato sauce')],
+    directions: [step('Fill', 'Halve and seed peppers; fill with beef, rice and sauce.'), step('Bake', 'Bake covered until the peppers are soft.')]
   },
   {
-    title: 'Honey Garlic Shrimp',
-    description: 'Succulent shrimp glazed in a sticky honey garlic sauce. Dinner is ready in just 15 minutes!',
-    imageUrl: 'https://images.unsplash.com/photo-1599084993091-1cb5c0721cc6?w=800',
-    servings: 4,
-    prepTime: 5,
-    cookTime: 10,
-    tags: ['Seafood', 'Quick', 'Asian'],
-    ingredients: [
-      { name: 'large shrimp', amount: '1.5', unit: 'lb' },
-      { name: 'honey', amount: '1/4', unit: 'cup' },
-      { name: 'soy sauce', amount: '3', unit: 'tbsp' },
-      { name: 'garlic', amount: '6', unit: 'cloves' },
-      { name: 'butter', amount: '2', unit: 'tbsp' },
-      { name: 'lemon juice', amount: '1', unit: 'tbsp' },
-      { name: 'red pepper flakes', amount: '1/4', unit: 'tsp' },
-      { name: 'green onions', amount: '3', unit: 'pieces' }
-    ],
-    directions: [
-      'Peel and devein shrimp if needed. Pat dry with paper towels.',
-      'Mix honey, soy sauce, and lemon juice in a small bowl.',
-      'Melt butter in a large skillet over medium-high heat.',
-      'Add minced garlic and red pepper flakes. Sauté for 30 seconds.',
-      'Add shrimp in a single layer. Cook 1-2 minutes per side until pink.',
-      'Pour honey garlic sauce over shrimp. Toss and cook 1 minute until sauce thickens and coats shrimp.',
-      'Garnish with sliced green onions. Serve over rice or with crusty bread.'
-    ]
+    title: 'Honey Garlic Shrimp', cook: 'theo', source: CLAUDE,
+    description: 'A sticky, fast weeknight shrimp.',
+    category: 'Main course', cuisine: 'American', servings: 4, prepTime: 5, cookTime: 10, vegetarian: false,
+    createdAt: '2026-02-10T18:00:00Z', tags: ['Seafood'],
+    ingredients: [ing('1', 'lb', 'Shrimp'), ing('3', 'cloves', 'Garlic'), ing('3', 'tbsp', 'Honey'), ing('2', 'tbsp', 'Soy sauce')],
+    directions: [step('Sauce', 'Whisk honey, soy and garlic.'), step('Cook', 'Sear shrimp 1–2 minutes a side, add sauce, toss until glossy.')]
+  },
+  {
+    title: 'Vegetable Stir Fry', cook: 'ines', source: CLAUDE,
+    description: 'Whatever is in the crisper, in a hot pan.',
+    category: 'Main course', cuisine: 'Asian', servings: 4, prepTime: 10, cookTime: 15, vegetarian: true,
+    createdAt: '2026-02-05T18:00:00Z', tags: ['Weeknight'],
+    ingredients: [ing('4', 'cups', 'Mixed vegetables'), ing('2', 'tbsp', 'Soy sauce'), ing('1', 'tbsp', 'Cornstarch'), ing('1 thumb', null, 'Ginger'), ing('', null, 'Salt & pepper')],
+    directions: [step('Prep', 'Cut vegetables small and even.'), step('Stir fry', 'Fry hardest vegetables first, then add the sauce.')]
+  },
+  {
+    title: 'Mediterranean Quinoa Salad', cook: 'sam', source: NYT, sourceUrl: 'https://cooking.nytimes.com/recipes/example-quinoa-salad',
+    description: 'A make-ahead salad that holds for days.',
+    category: 'Salad', cuisine: 'Mediterranean', servings: 6, prepTime: 20, cookTime: 15, vegetarian: true,
+    createdAt: '2026-01-28T18:00:00Z', tags: ['Make-Ahead'],
+    ingredients: [ing('1½', 'cups', 'Quinoa'), ing('1', null, 'Cucumber'), ing('1', 'cup', 'Cherry tomatoes'), ing('½', 'cup', 'Feta')],
+    directions: [step('Cook the quinoa', 'Simmer quinoa, fluff, and cool.'), step('Assemble', 'Toss with chopped vegetables, feta and dressing.')]
   }
 ];
 
-async function seed() {
+export class SeedRefusal extends Error {}
+
+/** Throws SeedRefusal unless it is safe to wipe and reseed. Deletes nothing. */
+export async function assertSafeToSeed(prisma, { force = false, env = process.env } = {}) {
+  if (env.NODE_ENV === 'production') {
+    throw new SeedRefusal('NODE_ENV=production: refusing to seed (--force does not override this).');
+  }
+  if (force) return;
+  const recipes = await prisma.recipe.count();
+  const others = await prisma.contributor.count({
+    where: { NOT: { name: { equals: DEFAULT_CONTRIBUTOR_NAME, mode: 'insensitive' } } }
+  });
+  if (recipes > 0 || others > 0) {
+    throw new SeedRefusal(
+      `Database already holds ${recipes} recipe(s) and ${others} non-default contributor(s): ` +
+      'refusing to delete them. Pass --force (make db-seed-force) to wipe and reseed a development database.'
+    );
+  }
+}
+
+export async function seed(prisma, { force = false, env = process.env } = {}) {
+  await assertSafeToSeed(prisma, { force, env });
   console.log('Seeding database...');
 
-  // Clear existing data
+  // Clear existing data: recipes before contributors (ON DELETE RESTRICT).
   await prisma.ingredient.deleteMany();
   await prisma.direction.deleteMany();
   await prisma.recipe.deleteMany();
   await prisma.tag.deleteMany();
+  await prisma.contributor.deleteMany();
 
-  for (const recipe of sampleRecipes) {
-    // Add time-based tag
-    const totalTime = (recipe.prepTime || 0) + (recipe.cookTime || 0);
-    const timeTag = getTimeTag(totalTime);
-    const allTags = timeTag ? [timeTag, ...recipe.tags] : recipe.tags;
+  const ids = {};
+  for (const c of COOKS) {
+    const created = await prisma.contributor.create({
+      data: { name: c.name, bio: c.bio, joinedAt: new Date(c.joinedAt) }
+    });
+    ids[c.key] = created.id;
+  }
 
+  for (const r of RECIPES) {
     await prisma.recipe.create({
       data: {
-        title: recipe.title,
-        description: recipe.description,
-        imageUrl: recipe.imageUrl,
-        servings: recipe.servings,
-        prepTime: recipe.prepTime,
-        cookTime: recipe.cookTime,
-        source: 'manual',
-        ingredients: {
-          create: recipe.ingredients
-        },
+        title: r.title,
+        description: r.description,
+        servings: r.servings,
+        prepTime: r.prepTime,
+        cookTime: r.cookTime,
+        totalMinutes: r.prepTime + r.cookTime,
+        timeSplitEstimated: Boolean(r.estimated),
+        source: r.source,
+        sourceUrl: r.sourceUrl ?? null,
+        category: toTitleCase(r.category),
+        cuisine: toTitleCase(r.cuisine),
+        vegetarian: r.vegetarian,
+        notes: r.notes ?? null,
+        createdAt: new Date(r.createdAt),
+        contributorId: ids[r.cook],
+        ingredients: { create: r.ingredients.map(prepareIngredient) },
         directions: {
-          create: recipe.directions.map((instruction, index) => ({
-            stepNumber: index + 1,
-            instruction
-          }))
+          create: r.directions.map((d, i) => ({ stepNumber: i + 1, heading: d.heading, instruction: d.instruction }))
         },
-        tags: {
-          connectOrCreate: allTags.map(tag => ({
-            where: { name: tag },
-            create: { name: tag }
-          }))
-        }
+        tags: { connectOrCreate: r.tags.map((name) => ({ where: { name }, create: { name } })) }
       }
     });
-    console.log(`Created recipe: ${recipe.title}`);
+    console.log(`Created recipe: ${r.title}`);
   }
 
   console.log('Seeding complete!');
 }
 
-seed()
-  .catch(e => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  const prisma = new PrismaClient();
+  seed(prisma, { force: process.argv.includes('--force') })
+    .catch((e) => {
+      console.error(e instanceof SeedRefusal ? `Refusing to seed: ${e.message}` : e);
+      process.exitCode = 1;
+    })
+    .finally(() => prisma.$disconnect());
+}

@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { parseHelloFreshUrl } from '../services/helloFreshParser.js';
+import { isHelloFreshUrl } from './importPreview.js';
+import { recipeInclude, presentRecipe } from '../services/recipeShape.js';
+import { prepareIngredients, prepareDirections, resolveContributorId, tagConnect } from '../services/recipeWrite.js';
 
 const router = Router();
 
@@ -12,13 +15,18 @@ router.post('/hellofresh', async (req, res, next) => {
       return res.status(400).json({ error: 'URL is required' });
     }
 
-    if (!url.includes('hellofresh.com')) {
+    if (typeof url !== 'string' || !isHelloFreshUrl(url)) {
       return res.status(400).json({ error: 'URL must be from hellofresh.com' });
     }
 
     const recipeData = await parseHelloFreshUrl(url);
 
-    // Create the recipe in the database
+    // Attributed to the default contributor until caller identity exists (COOK-23).
+    const contributorId = await resolveContributorId(req.prisma, undefined);
+
+    // Create the recipe in the database. The canonical stored value is
+    // 'HelloFresh' (ruling 15); legacy 'hellofresh' rows are read
+    // case-insensitively.
     const recipe = await req.prisma.recipe.create({
       data: {
         title: recipeData.title,
@@ -27,36 +35,22 @@ router.post('/hellofresh', async (req, res, next) => {
         servings: recipeData.servings,
         prepTime: recipeData.prepTime,
         cookTime: recipeData.cookTime,
-        source: 'hellofresh',
+        totalMinutes: recipeData.totalMinutes,
+        timeSplitEstimated: recipeData.timeSplitEstimated,
+        category: recipeData.category,
+        cuisine: recipeData.cuisine,
+        vegetarian: recipeData.vegetarian,
+        source: 'HelloFresh',
         sourceUrl: url,
-        ingredients: {
-          create: recipeData.ingredients.map(ing => ({
-            name: ing.name,
-            amount: ing.amount,
-            unit: ing.unit
-          }))
-        },
-        directions: {
-          create: recipeData.directions.map((instruction, index) => ({
-            stepNumber: index + 1,
-            instruction
-          }))
-        },
-        tags: {
-          connectOrCreate: recipeData.tags.map(tag => ({
-            where: { name: tag },
-            create: { name: tag }
-          }))
-        }
+        contributorId,
+        ingredients: { create: prepareIngredients(recipeData.ingredients) },
+        directions: { create: prepareDirections(recipeData.directions) },
+        tags: { connectOrCreate: tagConnect(recipeData.tags) }
       },
-      include: {
-        ingredients: true,
-        directions: { orderBy: { stepNumber: 'asc' } },
-        tags: true
-      }
+      include: recipeInclude
     });
 
-    res.status(201).json(recipe);
+    res.status(201).json(presentRecipe(recipe));
   } catch (error) {
     if (error.message.includes('Failed to fetch') || error.message.includes('parse')) {
       return res.status(400).json({ error: error.message });
