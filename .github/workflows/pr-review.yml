@@ -1,0 +1,42 @@
+name: PR Review
+
+# Fresh-context review of every pull request, via the shared definition in
+# construct-server (SERV-92). Nothing is copied here: `review-prompt.md` is
+# fetched at run time. Judgement lives in `REVIEW.md`; generated artifacts in
+# `.github/review-ignore`. See construct-server's `docs/pr-reviewer.md`.
+#
+# Needs this repo's own self-hosted runner and two secrets
+# (CLAUDE_CODE_OAUTH_TOKEN, SWITCHYARD_REVIEWER_TOKEN). Without the runner the
+# job sits `queued` for 24h with no annotation.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+# No `concurrency:` — the shared workflow owns it.
+
+jobs:
+  pr-review:
+    uses: Einlanzerous/construct-server/.github/workflows/pr-review-reusable.yml@main
+    with:
+      # Where a mistake loses data, breaks the boot, or ships a different image:
+      #   backend/prisma/        schema + migrations; docker-entrypoint.sh runs
+      #                          `prisma migrate deploy` on every container start
+      #   docker-entrypoint.sh,
+      #   Dockerfile             what runs in prod
+      #   backend/src/routes/    the HTTP surface (incl. /api/health contract)
+      #   backend/src/services/  parsing, quantity maths, writes
+      #   scripts/, docs/runbook the deploy / rollback path
+      #   .github/workflows/     decides what runs on the self-hosted runner
+      #   REVIEW.md, review-ignore  the reviewer's own standards and scope
+      sensitive_paths: '^(backend/prisma/|backend/src/(routes|services)/|backend/src/(app|index)\.js|docker-entrypoint\.sh|Dockerfile|scripts/|docs/runbook\.md|release-please-config\.json|\.github/workflows/|REVIEW\.md|\.github/review-ignore)'
+    secrets:
+      claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      switchyard_token: ${{ secrets.SWITCHYARD_REVIEWER_TOKEN }}
