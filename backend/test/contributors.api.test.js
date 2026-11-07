@@ -123,14 +123,15 @@ describeDb('contributors API', () => {
       expect((await request(app).get(`/api/contributors/${res.body.id}`)).status).toBe(200);
     });
 
-    it('stores optional bio, portraitUrl, email, externalId (email/externalId not echoed)', async () => {
+    it('stores bio and portraitUrl but ignores email and externalId (they are COOK-23 identity keys)', async () => {
       const res = await request(app)
         .post('/api/contributors')
         .send({ name: 'Ines Rojas', bio: 'Noodles.', portraitUrl: 'https://x.test/i.jpg', email: 'i@example.com', externalId: 'sub-1' });
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ bio: 'Noodles.', portraitUrl: 'https://x.test/i.jpg' });
       const row = await db.prisma.contributor.findUnique({ where: { id: res.body.id } });
-      expect(row).toMatchObject({ email: 'i@example.com', externalId: 'sub-1' });
+      expect(row.email).toBeNull();
+      expect(row.externalId).toBeNull();
     });
 
     it('409s on a case-insensitive duplicate name', async () => {
@@ -138,9 +139,11 @@ describeDb('contributors API', () => {
       expect(res.status).toBe(409);
     });
 
-    it('409s on a duplicate email', async () => {
-      const res = await request(app).post('/api/contributors').send({ name: 'Someone Else', email: 'm@example.com' });
+    it('a 409 never says which column collided', async () => {
+      const res = await request(app).post('/api/contributors').send({ name: 'mara OKAFOR' });
       expect(res.status).toBe(409);
+      expect(res.body).not.toHaveProperty('field');
+      expect(JSON.stringify(res.body)).not.toMatch(/email|externalId|target/i);
     });
 
     it.each([[{}], [{ name: '   ' }], [{ name: 42 }], [{ name: 'Ok', bio: 5 }]])('400s on invalid body %j', async (body) => {

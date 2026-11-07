@@ -126,7 +126,7 @@ describeDb('random recipe', () => {
       expect((await get('?vegetarian=0')).body.matches).toBe(2);
     });
 
-    it('maxMinutes uses totalMinutes and leaves out recipes with no total', async () => {
+    it('maxMinutes uses totalMinutes and leaves out recipes with no time at all', async () => {
       const quick = await make('Quick', { totalMinutes: 25 });
       await make('Slow', { totalMinutes: 90 });
       await make('Unknown');
@@ -135,6 +135,16 @@ describeDb('random recipe', () => {
       expect(res.body.recipe.id).toBe(quick.id);
       expect((await get('?maxMinutes=25')).body.matches).toBe(1);
       expect((await get('?maxMinutes=24')).body).toEqual({ recipe: null, matches: 0 });
+    });
+
+    it('a NULL total falls back to prep + cook, as the library and presentRecipe do (row written by the previous image)', async () => {
+      const old = await make('Old image row', { prepTime: 5, cookTime: 10 });
+      await make('Old but slow', { prepTime: 30, cookTime: 40 });
+      expect(old.totalMinutes).toBeNull();
+      const res = await get('?maxMinutes=30');
+      expect(res.body.matches).toBe(1);
+      expect(res.body.recipe.id).toBe(old.id);
+      expect((await get('?maxMinutes=14')).body.matches).toBe(0);
     });
 
     it('combines vegetarian and maxMinutes', async () => {

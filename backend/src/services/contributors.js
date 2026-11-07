@@ -96,9 +96,10 @@ export async function createContributor(prisma, body) {
     data: {
       name: body.name.trim(),
       bio: optionalText(body, 'bio'),
-      portraitUrl: optionalText(body, 'portraitUrl'),
-      email: optionalText(body, 'email'),
-      externalId: optionalText(body, 'externalId')
+      portraitUrl: optionalText(body, 'portraitUrl')
+      // email and externalId are deliberately NOT accepted here: they are the
+      // keys COOK-23's first-sign-in creation binds an identity to, and this
+      // route is open. A caller who could set them could pre-claim a sign-in.
     }
   });
   return presentContributor(created);

@@ -16,10 +16,21 @@ import { recipeInclude, presentRecipe } from './recipeShape.js';
 
 export const MAX_EXCLUDE = 50;
 
-export function filterWhere({ vegetarian = false, maxMinutes = null } = {}) {
+/**
+ * Same rule as presentRecipe and the library's "Under 30 min": the stored
+ * totalMinutes wins, and a NULL total (a row written by an image that predates
+ * the column) falls back to prep + cook. Prisma cannot compare a sum of
+ * columns, so the matching ids come from one raw query.
+ */
+export async function filterWhere(prisma, { vegetarian = false, maxMinutes = null } = {}) {
   const where = {};
   if (vegetarian) where.vegetarian = true;
-  if (maxMinutes != null) where.totalMinutes = { lte: maxMinutes };
+  if (maxMinutes != null) {
+    const rows = await prisma.$queryRaw`
+      SELECT id FROM "Recipe"
+      WHERE COALESCE("totalMinutes", "prepTime" + "cookTime") <= ${maxMinutes}`;
+    where.AND = [{ id: { in: rows.map((r) => r.id) } }];
+  }
   return where;
 }
 
@@ -28,7 +39,7 @@ export function filterWhere({ vegetarian = false, maxMinutes = null } = {}) {
  *   matches = how many recipes satisfy the filters, ignoring `exclude`.
  */
 export async function pickRandomRecipe(prisma, { vegetarian = false, maxMinutes = null, exclude = [] } = {}, rng = Math.random) {
-  const where = filterWhere({ vegetarian, maxMinutes });
+  const where = await filterWhere(prisma, { vegetarian, maxMinutes });
   const matches = await prisma.recipe.count({ where });
   if (matches === 0) return { recipe: null, matches: 0 };
 
