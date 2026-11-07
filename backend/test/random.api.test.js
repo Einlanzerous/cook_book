@@ -147,6 +147,14 @@ describeDb('random recipe', () => {
       expect((await get('?maxMinutes=14')).body.matches).toBe(0);
     });
 
+    it('a NULL total with only one of prep/cook set counts the missing part as 0', async () => {
+      const prepOnly = await make('Prep only', { prepTime: 10 });
+      await make('Cook only slow', { cookTime: 50 });
+      const res = await get('?maxMinutes=30');
+      expect(res.body.matches).toBe(1);
+      expect(res.body.recipe.id).toBe(prepOnly.id);
+    });
+
     it('combines vegetarian and maxMinutes', async () => {
       await make('Quick meat', { totalMinutes: 15 });
       await make('Slow veg', { totalMinutes: 80, vegetarian: true });

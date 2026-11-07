@@ -4,7 +4,8 @@
  *
  * Rules:
  *  - `vegetarian` filters on the Recipe.vegetarian column, never on tags.
- *  - `maxMinutes` filters on totalMinutes <= N; recipes with no total are out.
+ *  - `maxMinutes` filters on totalMinutes <= N; a NULL total falls back to
+ *    prep + cook (see filterWhere); recipes with no time at all are out.
  *  - `exclude` is a "not these" list (the client sends the recipe it just
  *    showed, so a reroll never repeats). It is soft in exactly one case: if the
  *    filters match only recipes that are excluded (a one-recipe library, say),
@@ -19,7 +20,7 @@ export const MAX_EXCLUDE = 50;
 /**
  * Same rule as presentRecipe and the library's "Under 30 min": the stored
  * totalMinutes wins, and a NULL total (a row written by an image that predates
- * the column) falls back to prep + cook. Prisma cannot compare a sum of
+ * the column) falls back to prep + cook, with a missing part counting as 0. Prisma cannot compare a sum of
  * columns, so the matching ids come from one raw query.
  */
 export async function filterWhere(prisma, { vegetarian = false, maxMinutes = null } = {}) {
@@ -28,7 +29,9 @@ export async function filterWhere(prisma, { vegetarian = false, maxMinutes = nul
   if (maxMinutes != null) {
     const rows = await prisma.$queryRaw`
       SELECT id FROM "Recipe"
-      WHERE COALESCE("totalMinutes", "prepTime" + "cookTime") <= ${maxMinutes}`;
+      WHERE COALESCE("totalMinutes",
+        CASE WHEN "prepTime" IS NULL AND "cookTime" IS NULL THEN NULL
+             ELSE COALESCE("prepTime", 0) + COALESCE("cookTime", 0) END) <= ${maxMinutes}`;
     where.AND = [{ id: { in: rows.map((r) => r.id) } }];
   }
   return where;
