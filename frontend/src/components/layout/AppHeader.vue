@@ -14,11 +14,6 @@ const store = useRecipeStore()
 const me = useMe()
 me.ensureLoaded()
 
-async function signOut() {
-  await me.signOut()
-  await router.push('/')
-}
-
 const searchInput = ref('')
 const searchEl = ref(null)
 
@@ -126,15 +121,9 @@ onBeforeUnmount(() => {
           Add recipe
         </router-link>
 
-        <div v-if="me.me" class="flex items-center gap-3 text-sm text-muted" data-test="identity">
-          <span>Filed as <span class="font-medium text-ink">{{ me.me.name }}</span></span>
-          <button type="button" class="text-muted underline-offset-2 hover:text-ink hover:underline" data-test="sign-out" @click="signOut">
-            Sign out
-          </button>
-        </div>
         <!-- A full navigation (not a router link): /auth/sso is served by the backend. -->
         <a
-          v-else-if="me.loaded && me.signInAvailable"
+          v-if="!me.me && me.loaded && me.signInAvailable"
           :href="signInUrl(route.fullPath)"
           class="text-sm !text-muted no-underline hover:!text-ink hover:underline"
           data-test="sign-in"
