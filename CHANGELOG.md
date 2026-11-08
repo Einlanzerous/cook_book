@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/Einlanzerous/cook_book/compare/v2.1.0...v2.1.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **ui:** show 'Filed as' and Sign out in the footer (COOK-39) ([#15](https://github.com/Einlanzerous/cook_book/issues/15)) ([25fb638](https://github.com/Einlanzerous/cook_book/commit/25fb63814aa96832da947fa8bd08957b5ca0b105))
+
 ## [2.1.0](https://github.com/Einlanzerous/cook_book/compare/v2.0.0...v2.1.0) (2026-11-08)
 
 
