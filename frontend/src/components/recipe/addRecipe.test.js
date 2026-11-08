@@ -155,6 +155,15 @@ describe('From a link', () => {
     expect(wrapper.text()).toContain('Only HelloFresh links work today')
   })
 
+  it('refuses an http: HelloFresh link without calling the API (the server is https only)', async () => {
+    const { wrapper } = await setup(ImportFromLink)
+    await wrapper.find('#import-url').setValue('http://www.hellofresh.com/recipes/x')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(importApi.previewHelloFresh).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Only HelloFresh links work today')
+  })
+
   it('shows the server error when the page cannot be fetched', async () => {
     importApi.previewHelloFresh.mockRejectedValue({ response: { data: { error: 'Could not fetch or read that recipe page.' } } })
     const { wrapper } = await setup(ImportFromLink)
