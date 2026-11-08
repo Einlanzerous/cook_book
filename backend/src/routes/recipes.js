@@ -7,9 +7,9 @@ import {
   tagConnect,
   prepareDirections,
   prepareIngredients,
-  scalarData,
-  resolveContributorId
+  scalarData
 } from '../services/recipeWrite.js';
+import { assertCanEdit, assertCanDelete } from '../services/ownership.js';
 
 const router = Router();
 
@@ -58,13 +58,14 @@ router.post('/', async (req, res, next) => {
   try {
     const body = req.body;
     const tags = processTags(body.tags);
-    const contributorId = await resolveContributorId(req.prisma, body.contributorId);
 
     const recipe = await req.prisma.recipe.create({
       data: {
         ...scalarData(body),
         source: normalizeSource(body.source),
-        contributorId,
+        // Attribution comes from the signed-in caller; a contributorId in the
+        // body is ignored, never trusted.
+        contributorId: req.contributor.id,
         ingredients: { create: prepareIngredients(body.ingredients || []) },
         directions: { create: prepareDirections(body.directions || []) },
         tags: { connectOrCreate: tagConnect(tags || []) }
@@ -91,13 +92,11 @@ router.put('/:id', async (req, res, next) => {
         include: { directions: true }
       });
       if (!existing) throw new HttpError(404, 'Recipe not found');
+      assertCanEdit(req.contributor, existing);
 
       const data = scalarData(body, existing);
       if (body.source !== undefined) data.source = normalizeSource(body.source);
-      if (body.contributorId !== undefined) {
-        if (body.contributorId === null) throw new HttpError(400, 'contributorId cannot be cleared');
-        data.contributorId = await resolveContributorId(tx, body.contributorId);
-      }
+      // Attribution is immutable: a contributorId in the body is ignored (200).
 
       if (body.ingredients !== undefined) {
         await tx.ingredient.deleteMany({ where: { recipeId: existing.id } });
@@ -127,8 +126,17 @@ router.put('/:id', async (req, res, next) => {
 // Delete recipe
 router.delete('/:id', async (req, res, next) => {
   try {
+    // Read first: a missing recipe is 404 BEFORE any ownership check (recipe
+    // ids are already public through GET, so this leaks nothing), then 403.
+    const existing = await req.prisma.recipe.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, contributorId: true }
+    });
+    if (!existing) throw new HttpError(404, 'Recipe not found');
+    assertCanDelete(req.contributor, existing);
+
     await req.prisma.recipe.delete({
-      where: { id: req.params.id }
+      where: { id: existing.id }
     });
 
     res.status(204).send();

@@ -10,7 +10,7 @@ vi.mock('axios', () => ({ default: { get: vi.fn() } }));
 import axios from 'axios';
 import { parseHelloFreshUrl } from '../src/services/helloFreshParser.js';
 import { describeDb, createScratchDb } from './helpers/db.js';
-import { createApp } from '../src/app.js';
+import { createTestApp, authed } from './helpers/auth.js';
 
 const html = fs.readFileSync(new URL('./fixtures/hellofresh-recipe.html', import.meta.url), 'utf8');
 const ldPage = (obj) =>
@@ -69,9 +69,14 @@ describe('HelloFresh parser tags (criterion 12)', () => {
 describeDb('POST /api/import/hellofresh (criterion 7)', () => {
   let db;
   let app;
+  let me;
   beforeAll(async () => {
     db = await createScratchDb();
-    app = createApp({ prisma: db.prisma });
+    const t = await createTestApp(db.prisma);
+    app = t.app;
+    await db.prisma.contributor.findFirst({ where: { name: 'magos' } }).then((m) => db.prisma.contributor.update({ where: { id: m.id }, data: { email: 'magos@example.com' } }));
+    const cookie = await t.signIn('magos@example.com');
+    me = () => authed(app, cookie);
   });
   afterAll(async () => { await db?.drop(); });
   beforeEach(async () => {
@@ -81,7 +86,7 @@ describeDb('POST /api/import/hellofresh (criterion 7)', () => {
 
   it('creates a recipe end to end from the saved fixture', async () => {
     serve(html);
-    const res = await request(app).post('/api/import/hellofresh').send({ url: URL_ }).expect(201);
+    const res = await me().post('/api/import/hellofresh').send({ url: URL_ }).expect(201);
     const r = res.body;
     expect(axios.get).toHaveBeenCalledTimes(1);
     expect(r).toMatchObject({
@@ -98,7 +103,7 @@ describeDb('POST /api/import/hellofresh (criterion 7)', () => {
       vegetarian: false,
       servings: 2
     });
-    expect(r.contributor.name).toBe('magos');   // via the fallback
+    expect(r.contributor.name).toBe('magos');   // the signed-in caller
     expect(r.directions.map((d) => d.instruction)).toEqual(['Cook the rice.', 'Brown the beef.']);
     expect(r.tags.map((t) => t.name)).toEqual(['Beef']);
     const rice = r.ingredients.find((i) => /Jasmine/i.test(i.name));
@@ -109,7 +114,7 @@ describeDb('POST /api/import/hellofresh (criterion 7)', () => {
 
   it('COOK-27: prod-pattern page stores corrected amount/unit/name/quantity and clean directions', async () => {
     serve(fs.readFileSync(new URL('./fixtures/hellofresh-prod-patterns.html', import.meta.url), 'utf8'));
-    const r = (await request(app).post('/api/import/hellofresh').send({ url: URL_ }).expect(201)).body;
+    const r = (await me().post('/api/import/hellofresh').send({ url: URL_ }).expect(201)).body;
     const by = (n) => r.ingredients.find((i) => i.name === n);
     expect(by('Israeli Couscous')).toMatchObject({ amount: '1/2', unit: 'cup', quantity: 0.5 });
     expect(by('Jasmine Rice')).toMatchObject({ amount: '3/4', unit: 'cup', quantity: 0.75 });
@@ -128,15 +133,15 @@ describeDb('POST /api/import/hellofresh (criterion 7)', () => {
 
   it('a veggie title sets vegetarian', async () => {
     serve(ldPage({ name: 'Veggie Burrito Bowl', totalTime: 'PT25M', recipeIngredient: ['1 cup Rice'], recipeInstructions: ['Cook.'] }));
-    const r = (await request(app).post('/api/import/hellofresh').send({ url: URL_ }).expect(201)).body;
+    const r = (await me().post('/api/import/hellofresh').send({ url: URL_ }).expect(201)).body;
     expect(r.vegetarian).toBe(true);
     expect(r.cuisine).toBe('Mexican');
     expect(r.totalMinutes).toBe(25);
   });
 
   it('rejects non-HelloFresh urls and a missing url', async () => {
-    await request(app).post('/api/import/hellofresh').send({}).expect(400);
-    await request(app).post('/api/import/hellofresh').send({ url: 'https://example.com/x' }).expect(400);
+    await me().post('/api/import/hellofresh').send({}).expect(400);
+    await me().post('/api/import/hellofresh').send({ url: 'https://example.com/x' }).expect(400);
     // Hostname is checked, not a substring: these all contain 'hellofresh.com'.
     for (const bad of [
       'http://169.254.169.254/latest/meta-data/?x=hellofresh.com',
@@ -145,7 +150,7 @@ describeDb('POST /api/import/hellofresh (criterion 7)', () => {
       'file:///etc/passwd#hellofresh.com',
       { toString: () => 'https://www.hellofresh.com/x' },
     ]) {
-      await request(app).post('/api/import/hellofresh').send({ url: bad }).expect(400);
+      await me().post('/api/import/hellofresh').send({ url: bad }).expect(400);
     }
   });
 });

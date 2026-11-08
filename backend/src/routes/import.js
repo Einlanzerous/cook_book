@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { parseHelloFreshUrl } from '../services/helloFreshParser.js';
-import { isHelloFreshUrl } from './importPreview.js';
+import { parseHelloFreshUrl, ImportError } from '../services/helloFreshParser.js';
+import { isHelloFreshUrl } from '../services/helloFreshUrl.js';
 import { recipeInclude, presentRecipe } from '../services/recipeShape.js';
-import { prepareIngredients, prepareDirections, resolveContributorId, tagConnect } from '../services/recipeWrite.js';
+import { prepareIngredients, prepareDirections, tagConnect } from '../services/recipeWrite.js';
 
 const router = Router();
 
@@ -21,8 +21,6 @@ router.post('/hellofresh', async (req, res, next) => {
 
     const recipeData = await parseHelloFreshUrl(url);
 
-    // Attributed to the default contributor until caller identity exists (COOK-23).
-    const contributorId = await resolveContributorId(req.prisma, undefined);
 
     // Create the recipe in the database. The canonical stored value is
     // 'HelloFresh' (ruling 15); legacy 'hellofresh' rows are read
@@ -42,7 +40,7 @@ router.post('/hellofresh', async (req, res, next) => {
         vegetarian: recipeData.vegetarian,
         source: 'HelloFresh',
         sourceUrl: url,
-        contributorId,
+        contributorId: req.contributor.id, // the signed-in caller
         ingredients: { create: prepareIngredients(recipeData.ingredients) },
         directions: { create: prepareDirections(recipeData.directions) },
         tags: { connectOrCreate: tagConnect(recipeData.tags) }
@@ -52,7 +50,7 @@ router.post('/hellofresh', async (req, res, next) => {
 
     res.status(201).json(presentRecipe(recipe));
   } catch (error) {
-    if (error.message.includes('Failed to fetch') || error.message.includes('parse')) {
+    if (error instanceof ImportError) {
       return res.status(400).json({ error: error.message });
     }
     next(error);

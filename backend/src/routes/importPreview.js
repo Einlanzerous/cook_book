@@ -1,19 +1,10 @@
 import { Router } from 'express';
-import { parseHelloFreshUrl } from '../services/helloFreshParser.js';
+import { parseHelloFreshUrl, ImportError } from '../services/helloFreshParser.js';
+import { isHelloFreshUrl } from '../services/helloFreshUrl.js';
 
 const router = Router();
 
-/** True for http(s) URLs whose host is hellofresh.com or a subdomain of it. */
-export function isHelloFreshUrl(value) {
-  try {
-    const u = new URL(value);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
-    const host = u.hostname.toLowerCase();
-    return host === 'hellofresh.com' || host.endsWith('.hellofresh.com');
-  } catch {
-    return false;
-  }
-}
+export { isHelloFreshUrl };
 
 /**
  * Shape of the preview: the parsed recipe as the create endpoint would store
@@ -60,7 +51,7 @@ router.post('/hellofresh/preview', async (req, res, next) => {
     }
     res.json(presentPreview(await parseHelloFreshUrl(url), url));
   } catch (error) {
-    if (error.message?.includes('Failed to fetch') || error.message?.includes('parse')) {
+    if (error instanceof ImportError) {
       return res.status(400).json({ error: error.message });
     }
     next(error);

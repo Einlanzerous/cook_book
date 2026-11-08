@@ -1,14 +1,58 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { normalizeAmount } from './quantity.js';
+import { isHelloFreshUrl } from './helloFreshUrl.js';
+
+/**
+ * A failure the caller may be told about. The message is a FIXED string: the
+ * underlying error (hostnames, resolver output, parser internals) goes to the
+ * log only, never to the response.
+ */
+export class ImportError extends Error {
+  constructor(message = 'Could not import that recipe.') {
+    super(message);
+    this.status = 400;
+  }
+}
+
+export const FETCH_TIMEOUT_MS = 10_000;
+export const MAX_PAGE_BYTES = 3 * 1024 * 1024;
+export const MAX_REDIRECTS = 5;
+
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+/**
+ * GET a HelloFresh page with a timeout, a response size cap, and redirects
+ * followed by hand so EVERY hop is re-validated against isHelloFreshUrl (a
+ * redirect to another host, or to http:, is refused).
+ */
+export async function fetchHelloFreshPage(url) {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    if (!isHelloFreshUrl(current)) throw new Error(`refusing to fetch non-HelloFresh URL (hop ${hop})`);
+    const response = await axios.get(current, {
+      headers: { 'User-Agent': USER_AGENT },
+      timeout: FETCH_TIMEOUT_MS,
+      maxContentLength: MAX_PAGE_BYTES,
+      maxBodyLength: MAX_PAGE_BYTES,
+      maxRedirects: 0,
+      responseType: 'text',
+      validateStatus: (status) => status >= 200 && status < 400
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers?.location;
+      if (!location) throw new Error('redirect without a Location header');
+      current = new URL(location, current).toString();
+      continue;
+    }
+    return response;
+  }
+  throw new Error('too many redirects');
+}
 
 export async function parseHelloFreshUrl(url) {
   try {
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
+    const response = await fetchHelloFreshPage(url);
 
     const $ = cheerio.load(response.data);
 
@@ -32,7 +76,8 @@ export async function parseHelloFreshUrl(url) {
     // Fallback to HTML parsing
     return parseHtml($);
   } catch (error) {
-    throw new Error(`Failed to fetch recipe: ${error.message}`);
+    console.error(`import: failed to fetch or parse ${url}: ${error.message}`);
+    throw new ImportError('Could not fetch or read that recipe page.');
   }
 }
 

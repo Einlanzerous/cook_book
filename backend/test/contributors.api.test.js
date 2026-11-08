@@ -5,7 +5,7 @@
 import request from 'supertest';
 import { it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { describeDb, createScratchDb } from './helpers/db.js';
-import { createApp } from '../src/app.js';
+import { createTestApp } from './helpers/auth.js';
 import { summariseSources } from '../src/services/contributors.js';
 import { describe } from 'vitest';
 
@@ -32,6 +32,7 @@ describe('summariseSources', () => {
 describeDb('contributors API', () => {
   let db;
   let app;
+  let t;
   let mara;
   let wren;
 
@@ -41,7 +42,8 @@ describeDb('contributors API', () => {
   beforeAll(async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     db = await createScratchDb();
-    app = createApp({ prisma: db.prisma });
+    t = await createTestApp(db.prisma);
+    app = t.app;
     mara = await db.prisma.contributor.create({
       data: { name: 'Mara Okafor', bio: 'Weeknight bowls.', joinedAt: new Date('2026-02-03T18:00:00Z'), email: 'm@example.com' }
     });
@@ -113,48 +115,19 @@ describeDb('contributors API', () => {
     });
   });
 
-  describe('POST /api/contributors', () => {
-    it('creates a cook with just a name', async () => {
-      const res = await request(app).post('/api/contributors').send({ name: '  Theo Brandt ' });
-      expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ name: 'Theo Brandt', bio: null, portraitUrl: null, recipeCount: 0, sourceCount: 0 });
-      expect(res.body.id).toBeTruthy();
-      expect(res.body.joinedAt).toBeTruthy();
-      expect((await request(app).get(`/api/contributors/${res.body.id}`)).status).toBe(200);
-    });
-
-    it('stores bio and portraitUrl but ignores email and externalId (they are COOK-23 identity keys)', async () => {
-      const res = await request(app)
-        .post('/api/contributors')
-        .send({ name: 'Ines Rojas', bio: 'Noodles.', portraitUrl: 'https://x.test/i.jpg', email: 'i@example.com', externalId: 'sub-1' });
-      expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ bio: 'Noodles.', portraitUrl: 'https://x.test/i.jpg' });
-      const row = await db.prisma.contributor.findUnique({ where: { id: res.body.id } });
-      expect(row.email).toBeNull();
-      expect(row.externalId).toBeNull();
-    });
-
-    it('409s on a case-insensitive duplicate name', async () => {
-      const res = await request(app).post('/api/contributors').send({ name: 'mara OKAFOR' });
-      expect(res.status).toBe(409);
-    });
-
-    it('a 409 never says which column collided', async () => {
-      const res = await request(app).post('/api/contributors').send({ name: 'mara OKAFOR' });
-      expect(res.status).toBe(409);
-      expect(res.body).not.toHaveProperty('field');
-      expect(JSON.stringify(res.body)).not.toMatch(/email|externalId|target/i);
-    });
-
-    it.each([[{}], [{ name: '   ' }], [{ name: 42 }], [{ name: 'Ok', bio: 5 }]])('400s on invalid body %j', async (body) => {
-      const res = await request(app).post('/api/contributors').send(body);
-      expect(res.status).toBe(400);
+  describe('no write routes (COOK-23: contributors exist only through a verified sign-in)', () => {
+    it('POST /api/contributors is gone: a signed-out call is 401 and a signed-in call is 404', async () => {
+      expect((await request(app).post('/api/contributors').send({ name: 'Theo' })).status).toBe(401);
+      const cookie = await t.signIn('theo@example.com');
+      const res = await request(app).post('/api/contributors').set('Cookie', cookie).send({ name: 'Theo Brandt' });
+      expect(res.status).toBe(404);
+      expect(await db.prisma.contributor.count({ where: { name: 'Theo Brandt' } })).toBe(0);
     });
 
     it('has no DELETE endpoint', async () => {
-      const res = await request(app).delete(`/api/contributors/${mara.id}`);
-      expect(res.status).not.toBe(200);
-      expect(res.status).not.toBe(204);
+      const cookie = await t.signIn('theo@example.com');
+      const res = await request(app).delete(`/api/contributors/${mara.id}`).set('Cookie', cookie);
+      expect(res.status).toBe(404);
       expect(await db.prisma.contributor.findUnique({ where: { id: mara.id } })).not.toBeNull();
     });
   });

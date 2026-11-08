@@ -64,10 +64,6 @@ export const contributorApi = {
   getById(id) {
     return api.get(`/contributors/${encodeURIComponent(id)}`)
   },
-
-  create(contributor) {
-    return api.post('/contributors', contributor)
-  }
 }
 
 export const importApi = {
@@ -79,6 +75,22 @@ export const importApi = {
   // in create shape; send it to recipeApi.create to confirm.
   previewHelloFresh(url) {
     return api.post('/import/hellofresh/preview', { url })
+  }
+}
+
+// Who is signed in (COOK-23). Never 401: signed out is { contributor: null }.
+export const meApi = {
+  get() {
+    return api.get('/me')
+  }
+}
+
+// Sign-in lives outside /api: /auth/sso is a full-page navigation (a plain link),
+// and sign-out is a bodyless POST.
+const authClient = axios.create({ baseURL: '/auth' })
+export const authApi = {
+  logout() {
+    return authClient.post('/logout')
   }
 }
 

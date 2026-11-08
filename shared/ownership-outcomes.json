@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "COOK-23: the ONE source of truth for who may edit and delete a recipe.",
+    "Read by the backend handler tests (backend/test/ownership.test.js, against the real PUT and DELETE handlers)",
+    "and by the frontend tests of canEdit/canDelete (frontend/src/lib/ownership.test.js), so the server rule and",
+    "the SPA's idea of which controls to show cannot drift. Change the rule here, in backend/src/services/ownership.js",
+    "and in frontend/src/lib/ownership.js together.",
+    "Keyed by the Ownership ruling's option, then the Unattributed-recipes ruling's option, then rows.",
+    "actor: author = the signed-in recipe author; other = a different signed-in contributor; signedOut = no session.",
+    "recipe: attributed = has a contributor (the author, for the author row); unattributed = contributorId is NULL.",
+    "edit/delete are the expected HTTP status of PUT and DELETE; the SPA shows the control exactly when it is 2xx."
+  ],
+  "active": { "ownership": "any-edits-author-deletes", "unattributed": "any-signed-in" },
+  "outcomes": {
+    "any-edits-author-deletes": {
+      "any-signed-in": [
+        { "actor": "author", "recipe": "attributed", "edit": 200, "delete": 204 },
+        { "actor": "other", "recipe": "attributed", "edit": 200, "delete": 403 },
+        { "actor": "signedOut", "recipe": "attributed", "edit": 401, "delete": 401 },
+        { "actor": "other", "recipe": "unattributed", "edit": 200, "delete": 204 },
+        { "actor": "signedOut", "recipe": "unattributed", "edit": 401, "delete": 401 }
+      ]
+    }
+  }
+}

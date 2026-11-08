@@ -5,7 +5,7 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { describeDb, createScratchDb } from './helpers/db.js';
-import { createApp } from '../src/app.js';
+import { createTestApp } from './helpers/auth.js';
 import { pickRandomRecipe } from '../src/services/randomRecipe.js';
 
 describeDb('random recipe', () => {
@@ -14,7 +14,7 @@ describeDb('random recipe', () => {
 
   beforeAll(async () => {
     db = await createScratchDb();
-    app = createApp({ prisma: db.prisma });
+    app = (await createTestApp(db.prisma)).app;
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
   afterAll(async () => {

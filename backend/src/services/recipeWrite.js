@@ -4,6 +4,7 @@
  */
 import { prepareIngredient } from './quantity.js';
 
+/** The legacy owner row. Used by the seed only; attribution comes from the signed-in caller (COOK-23). */
 export const DEFAULT_CONTRIBUTOR_NAME = 'magos';
 
 export class HttpError extends Error {
@@ -113,33 +114,4 @@ export function scalarData(body, existing = null) {
     data.totalMinutes = prep == null && cook == null ? null : (prep ?? 0) + (cook ?? 0);
   }
   return data;
-}
-
-/**
- * Contributor for a write. An explicit id must exist (clean 400, not an FK
- * 500). When omitted, TEMPORARY fallback to the default contributor 'magos'
- * (ruling 11; COOK-23 replaces this with caller identity and COOK-26 removes
- * it). A missing default is a loud 500, never a NULL contributor.
- */
-export async function resolveContributorId(db, requested) {
-  if (requested !== undefined && requested !== null) {
-    if (typeof requested !== 'string' || !requested) {
-      throw new HttpError(400, 'contributorId must be a contributor id string');
-    }
-    const found = await db.contributor.findUnique({ where: { id: requested }, select: { id: true } });
-    if (!found) throw new HttpError(400, `Unknown contributorId: ${requested}`);
-    return found.id;
-  }
-  const fallback = await db.contributor.findFirst({
-    where: { name: { equals: DEFAULT_CONTRIBUTOR_NAME, mode: 'insensitive' } },
-    select: { id: true }
-  });
-  if (!fallback) {
-    throw new HttpError(
-      500,
-      `Default contributor "${DEFAULT_CONTRIBUTOR_NAME}" is missing, so this recipe cannot be attributed. ` +
-      'Restore it (see docs/runbook.md) or pass contributorId.'
-    );
-  }
-  return fallback.id;
 }

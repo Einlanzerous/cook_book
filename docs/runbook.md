@@ -66,21 +66,33 @@ The script refuses anything that is not a loopback URL on a port other than
 
 ## 3. Verifying an app-image rollback
 
-Because the migration is additive, rolling the app image back is safe. To prove
-it for a given previous release (manual verification; needs Docker, not run in CI):
+Because migrations are additive, rolling the app image back is safe. To prove
+it for a given previous release (manual verification; needs Docker, curl and
+jq; **not run in CI**):
 
 ```sh
-docker pull ghcr.io/einlanzerous/cook_book:1.2.0
-scripts/verify-rollback.sh postgresql://postgres@127.0.0.1:55541/cook_book 1.2.0
+docker pull ghcr.io/einlanzerous/cook_book:2.0.0
+scripts/verify-rollback.sh postgresql://postgres@127.0.0.1:55541/cook_book 2.0.0
 ```
 
-It runs the old image on a loopback port against the migrated copy, checks
-pre-existing rows keep their stored `source` (`hellofresh`), creates and reads a
-recipe, then runs the new code against the row the old image created
-(`contributorId` and `totalMinutes` NULL; the API serialises `contributor: null`).
+The database must be a throwaway, already-migrated copy on loopback (section 2,
+then `backend/scripts/verify-migration-copy.mjs`). The script:
+
+1. runs the OLD image on a loopback port against the migrated copy, checks
+   pre-existing rows keep their stored `source`, and creates and reads a recipe
+   (a 2.0.0 image attributes it to `magos` through its fallback);
+2. sets the copy's `magos` email to a throwaway address, starts the NEW code with
+   `AUTH_MODE=dev`, `PUBLIC_ORIGIN=http://127.0.0.1:<port>` and
+   `DEV_AUTH_EMAIL` set to it, and signs in with `curl -c jar .../auth/sso`
+   (dev identity `sub = dev:<email>`, which binds the `magos` row, so the
+   session's contributor IS `magos`);
+3. asserts the new code reads the row the old image created and that its
+   contributor is `magos`, then deletes that row with the cookie jar (the caller
+   is the author, so it passes the ownership rule).
+
 Narrow cosmetic exception: a recipe written by new code with
-`source='HelloFresh'` (what the importer now writes) shows no badge on the old
-image, whose check is `source === 'hellofresh'`.
+`source='HelloFresh'` (what the importer writes) shows no badge on a 1.x image,
+whose check is `source === 'hellofresh'`.
 
 ## 4. Writing a migration
 
@@ -151,15 +163,11 @@ docker run --rm --network construct_net --env-file <the app's env file> \
 
 ## 6. Default contributor
 
-The migration creates one contributor named `magos` (id from
-`gen_random_uuid()`, `joinedAt` = the earliest recipe `createdAt`, or the
-migration time on an empty database) and attaches every existing recipe to it.
-It is created even on an empty database because the API falls back to it
-(ruling 11): a create with no `contributorId` is attributed to the contributor
-whose `lower(name) = 'magos'`. If it is missing the API returns a clear 500, never
-a recipe with a NULL contributor. The fallback is temporary: COOK-23 replaces it
-with the caller's identity, COOK-26 removes it. **Do not rename or delete
-`magos`** before then; the lookup is by name.
+The migration creates one contributor named `magos` and attaches every existing
+recipe to it. Since COOK-23 attribution comes from the signed-in caller; the
+`magos` fallback in the API is gone. `magos` is now simply the legacy owner row:
+bind it to the owner's sign-in (section 10) so the legacy recipes stay theirs.
+Do not rename it (the seed and the runbook SQL look it up by name).
 
 ## 7. Replacing the legacy HelloFresh recipes (after COOK-27)
 
@@ -169,14 +177,20 @@ and a scraper bug leaves some amounts wrong (COOK-27). They are **replaced, not
 migrated**, once COOK-6 and COOK-27 are deployed. The delete step is required:
 re-importing without it duplicates every recipe.
 
+Writes now need a session (COOK-23). Sign in as the owner (the `magos` row's
+owner), copy the session cookie from the browser's dev tools into `COOKIE`, and
+send it with every write; only the author may delete, and the legacy recipes are
+`magos`'s.
+
 ```sh
 BASE=http://localhost:3000/api    # or the deployed URL
+COOKIE='__Host-cb_session=<value>'  # `cb_session` in AUTH_MODE=dev
 # 1. save the source urls first
 curl -s $BASE/recipes | jq -r '.[] | select(.sourceUrl) | [.id, .sourceUrl] | @tsv' > legacy.tsv
 # 2. delete each, then 3. re-import each from its url
 while IFS="$(printf '\t')" read -r id url; do
-  curl -s -X DELETE "$BASE/recipes/$id"
-  curl -s -X POST "$BASE/import/hellofresh" -H 'content-type: application/json' \
+  curl -s -X DELETE "$BASE/recipes/$id" -H "Cookie: $COOKIE"
+  curl -s -X POST "$BASE/import/hellofresh" -H 'content-type: application/json' -H "Cookie: $COOKIE" \
     -d "$(jq -n --arg url "$url" '{url: $url}')" | jq -r '.title'
 done < legacy.tsv
 ```
@@ -215,3 +229,121 @@ make test-db         # the same against a throwaway postgres:16-alpine (port TES
 override that. `NODE_ENV` is not set in the Dockerfile, so the real protection
 is the second rule: it also refuses when any `Recipe` or any contributor other
 than `magos` exists. Never run it against a database you care about.
+
+## 10. Sign-in, sessions and the owner (COOK-23)
+
+Contributors live only in Cloudflare Access. The app verifies the Access JWT at
+`GET /auth/sso`, mints its own session (an opaque token in the
+`__Host-cb_session` cookie, stored as a SHA-256 hash in the `Session` table, 30
+days, fixed life, no sliding renewal) and attributes every write to that
+contributor. Everything without a session is a 401.
+
+### Environment
+
+| Env | Value |
+|---|---|
+| `AUTH_MODE` | `access` (default). `dev` only on a loopback `PUBLIC_ORIGIN` and never with `NODE_ENV=production`; both are checked at boot |
+| `CF_ACCESS_TEAM_DOMAIN` | e.g. `zero-gravity-industries.cloudflareaccess.com` (bare host) |
+| `CF_ACCESS_AUD` | the Access application's AUD (one value; it changes at the Phase 2 cutover) |
+| `PUBLIC_ORIGIN` | `https://commonplace.zerogravity.industries` (the `Origin` check compares against it) |
+| `SESSION_DAYS` | optional, default 30 |
+| `SSO_ENABLED` | optional; `false` makes `/auth/sso` 404 (reads keep working) |
+| `DEV_AUTH_EMAIL` | `AUTH_MODE=dev` only; must be unset in prod |
+
+The process **refuses to start** if the access-mode variables are missing or
+malformed. Because `docker-entrypoint.sh` runs `prisma migrate deploy` before
+`node`, a new image started without them migrates and then crash-loops: the
+construct-server env change must be deployed **first** (it is harmless to 2.0.0).
+Check with `docker exec cook_book env | grep -E 'CF_ACCESS|PUBLIC_ORIGIN'`.
+
+### Binding the owner (before the COOK-23 image is promoted)
+
+`magos` has no email, so it would match nobody. Run once, **before** promoting
+the COOK-23 image (2.0.0 ignores the column, so this is safe at any time after
+Phase 1 is live, and doing it first closes the window in which another member
+could sign in before the owner). Use the exact address Access signs in with, lower case:
+
+```sql
+UPDATE "Contributor" SET email = '<owner email, lower case>' WHERE lower(name) = 'magos';
+```
+
+The owner's first `/auth/sso` then binds `externalId` (the Access `sub`) to that
+row, and every legacy recipe stays attributed to them. The app logs a boot
+warning (`auth.boot warning: contributor ... has no email or externalId`) for any
+contributor that owns recipes but can never be signed in as; seeing it for
+`magos` means this step was missed.
+
+### Owner signed in first (recovery)
+
+If the owner signed in before the UPDATE they got a NEW contributor holding their
+email, and the UPDATE above fails on `Contributor_email_key`. Recover in one
+transaction (this is the exact SQL a test runs): it re-attributes anything that
+row created, removes it (its sessions cascade), then sets the email on `magos`:
+
+```sql
+BEGIN;
+UPDATE "Recipe" SET "contributorId" = (SELECT id FROM "Contributor" WHERE lower(name) = 'magos')
+  WHERE "contributorId" = (SELECT id FROM "Contributor" WHERE email = '<owner email>');
+DELETE FROM "Contributor" WHERE email = '<owner email>';
+UPDATE "Contributor" SET email = '<owner email>' WHERE lower(name) = 'magos';
+COMMIT;
+```
+
+Then sign in again so the bind happens on `magos`.
+
+### Naming people
+
+New contributors are created on first sign-in with a neutral placeholder name
+(`Cook 3`), because `GET /api/contributors` is public and an email must never be
+shown. Name them when you invite them:
+
+```sql
+UPDATE "Contributor" SET name = 'Mara Okafor', bio = '...' WHERE email = 'mara@example.com';
+```
+
+### Revoking a person
+
+Removing someone from the Access group does **not** end an existing session; it
+lives out its 30 days. Do both:
+
+1. remove them from the Access group (Cloudflare);
+2. end their sessions (takes effect on their next request):
+
+```sql
+UPDATE "Session" SET "revokedAt" = now()
+  WHERE "contributorId" = (SELECT id FROM "Contributor" WHERE email = '<their email>')
+    AND "revokedAt" IS NULL;
+```
+
+### Pruning
+
+Expired and revoked rows are pruned opportunistically at every sign-in, so no
+scheduler is needed. To prune by hand (a test pins this statement):
+
+```sql
+DELETE FROM "Session" WHERE "expiresAt" < now() - interval '7 days'
+  OR ("revokedAt" IS NOT NULL AND "revokedAt" < now() - interval '7 days');
+```
+
+### Rollback to 2.0.0
+
+Revert the image to 2.0.0. The `Session` table is ignored by it
+(`scripts/verify-rollback.sh`, section 3). **Writes are open again** (the
+pre-COOK-23 exposure), so do not make the host public while rolled back. To drop
+the table as well, only after the image is rolled back:
+`DROP TABLE "Session"; DELETE FROM "_prisma_migrations" WHERE migration_name = '20261107120000_session_table';`
+
+### Known Phase 1 gap
+
+Until Phase 2 narrows Access to `/auth/sso` with the dedicated contributors
+policy, `/auth/sso` is behind the broad members group, so any member who opens it
+becomes a contributor. Every member already has unauthenticated write access
+today, so this is no regression; the "invited contributors only" boundary is real
+only from Phase 2. Setting `SSO_ENABLED=false` switches sign-in off.
+
+### Not verifiable from the repo
+
+Whether Traefik forwards `Cf-Access-Jwt-Assertion` to `cook_book`, and container
+egress to the Access certs URL, are only confirmable live. The failure signal for
+the first is the log line `auth.sso reject reason=missing`. The named live check
+is in the COOK-23 plan.

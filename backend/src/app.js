@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import randomRouter from './routes/random.js';
@@ -8,6 +7,8 @@ import tagsRouter from './routes/tags.js';
 import importRouter from './routes/import.js';
 import importPreviewRouter from './routes/importPreview.js';
 import contributorsRouter from './routes/contributors.js';
+import { createAuthRouter, createMeRouter } from './routes/auth.js';
+import { createWriteGuard } from './middleware/writeGuard.js';
 import { recipeInclude, presentRecipe } from './services/recipeShape.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { resolveBuildIdentity } from './buildIdentity.js';
@@ -15,33 +16,64 @@ import { resolveBuildIdentity } from './buildIdentity.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Build the express app around a Prisma client. Nothing here listens or reads
- * the environment at import, so tests can mount it with supertest (and a fake
- * or scratch-database client); src/index.js is the process entry that owns
- * the real PrismaClient, the port and shutdown.
+ * One api router plus a registry of what was mounted on it. The write-gate
+ * test walks the registry (each router's own `stack`; the routers are not
+ * nested) to prove every write route is closed, and that a new one fails the
+ * test until someone lists it.
  */
-export function createApp({ prisma }) {
+export function createApiRegistry() {
+  const apiRouter = express.Router();
+  const registry = [];
+  function mountApi(routePath, router) {
+    registry.push({ path: routePath, router });
+    apiRouter.use(routePath, router);
+  }
+  return { apiRouter, mountApi, registry };
+}
+
+/**
+ * Build the express app around a Prisma client, the validated auth config
+ * (config.js) and its Access verifier (boot.js). Nothing here listens or
+ * reads the environment at import, so tests can mount it with supertest (and
+ * a scratch-database client); src/index.js is the process entry that owns
+ * the real PrismaClient, the port and shutdown.
+ *
+ * `jsonParser` is injectable only so a test can prove the write guard rejects
+ * a request before any body is parsed.
+ */
+export function createApp({ prisma, config, verifyAccess, jsonParser = express.json(), log = console.log }) {
   const app = express();
 
+  // No cors(): the SPA is same-origin, so no Access-Control-Allow-Origin is
+  // ever sent (COOK-23, "Cross-origin reads" ruling).
 
-  // Middleware
-  app.use(cors());
-  app.use(express.json());
-
-  // Make prisma available to routes
+  // Make prisma available to routes and the guard.
   app.use((req, res, next) => {
     req.prisma = prisma;
     next();
   });
 
+  // The write gate runs BEFORE express.json(), on /api and on logout.
+  app.use('/api', createWriteGuard({ config, log }));
+  app.post('/auth/logout', createWriteGuard({ config, log, requireSession: false }));
+
+  app.use(jsonParser);
+
+  // Sign-in lives outside /api and ahead of the SPA catch-all below.
+  app.use('/auth', createAuthRouter({ config, verifyAccess, log }));
+
   // Routes
+  const { apiRouter, mountApi, registry } = createApiRegistry();
+  app.locals.apiRegistry = registry;
   // Before recipesRouter, or '/:id' would swallow 'random'.
-  app.use('/api/recipes/random', randomRouter);
-  app.use('/api/recipes', recipesRouter);
-  app.use('/api/tags', tagsRouter);
-  app.use('/api/import', importPreviewRouter);
-  app.use('/api/import', importRouter);
-  app.use('/api/contributors', contributorsRouter);
+  mountApi('/recipes/random', randomRouter);
+  mountApi('/recipes', recipesRouter);
+  mountApi('/tags', tagsRouter);
+  mountApi('/import', importPreviewRouter);
+  mountApi('/import', importRouter);
+  mountApi('/contributors', contributorsRouter);
+  mountApi('/me', createMeRouter({ config }));
+  app.use('/api', apiRouter);
 
   // Search endpoint
   app.get('/api/search', async (req, res, next) => {

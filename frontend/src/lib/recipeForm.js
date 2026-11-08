@@ -4,7 +4,7 @@
  * The PUT is a partial update, so an edit sends exactly the fields the form
  * owns and nothing else: stored fields the form does not show (for example
  * `timeSplitEstimated` when times are untouched) are left alone, and fields it
- * does show (step headings, notes, category, cuisine, vegetarian, contributor)
+ * does show (step headings, notes, category, cuisine, vegetarian)
  * are loaded into the form first so they round-trip instead of being erased.
  */
 
@@ -20,7 +20,6 @@ export function emptyForm() {
     imageUrl: '',
     source: '',
     sourceUrl: '',
-    contributorId: '',
     category: '',
     cuisine: '',
     vegetarian: false,
@@ -49,7 +48,6 @@ export function formFromRecipe(recipe) {
     imageUrl: str(recipe.imageUrl),
     source: isBlankSource(recipe.source) ? '' : recipe.source,
     sourceUrl: str(recipe.sourceUrl),
-    contributorId: recipe.contributor?.id || recipe.contributorId || '',
     category: str(recipe.category),
     cuisine: str(recipe.cuisine),
     vegetarian: Boolean(recipe.vegetarian),
@@ -87,7 +85,6 @@ export function validateForm(form, original = null) {
   if (!original || !isBlankSource(original.source)) {
     if (!form.source.trim()) errors.source = 'Say where it came from: a person, a book, a site.'
   }
-  if (!form.contributorId) errors.contributorId = 'Pick who is filing this.'
   for (const [key, label] of [['servings', 'Serves'], ['prepTime', 'Prep'], ['cookTime', 'Cook'], ['totalMinutes', 'Total']]) {
     const n = num(form[key])
     if (Number.isNaN(n) || (n !== null && n < 0)) errors[key] = `${label} must be a number, zero or more.`
@@ -113,7 +110,6 @@ export function buildPayload(form, original = null) {
     description: form.description.trim() || null,
     imageUrl: form.imageUrl.trim() || null,
     sourceUrl: form.sourceUrl.trim() || null,
-    contributorId: form.contributorId,
     category: form.category.trim() || null,
     cuisine: form.cuisine.trim() || null,
     vegetarian: form.vegetarian,
@@ -143,15 +139,14 @@ export function buildPayload(form, original = null) {
   return payload
 }
 
-/** Payload for saving a previewed import: the preview as parsed, plus who filed it. */
-export function payloadFromPreview(preview, contributorId) {
+/** Payload for saving a previewed import: the preview as parsed. Who filed it is the signed-in caller; the server decides. */
+export function payloadFromPreview(preview) {
   return {
     title: preview.title,
     description: preview.description,
     imageUrl: preview.imageUrl,
     source: preview.source,
     sourceUrl: preview.sourceUrl,
-    contributorId,
     category: preview.category,
     cuisine: preview.cuisine,
     vegetarian: preview.vegetarian,

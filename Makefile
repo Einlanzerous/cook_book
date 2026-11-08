@@ -10,6 +10,8 @@ DB_USER := $(shell whoami)
 DB_PASSWORD :=
 DB_HOST :=
 DB_PORT := 5432
+# Local sign-in identity for `make dev` (AUTH_MODE=dev; refused in production and off loopback)
+DEV_AUTH_EMAIL ?= dev@example.com
 
 # Build connection string based on whether host is specified
 ifdef DB_HOST
@@ -131,7 +133,7 @@ dev:
 	@make -j2 dev-backend dev-frontend
 
 dev-backend:
-	@cd backend && DATABASE_URL="$(DATABASE_URL)" npm run dev
+	@cd backend && DATABASE_URL="$(DATABASE_URL)" AUTH_MODE=dev PUBLIC_ORIGIN=http://localhost:5173 DEV_AUTH_EMAIL="$(DEV_AUTH_EMAIL)" npm run dev
 
 dev-frontend:
 	@cd frontend && npm run dev

@@ -104,8 +104,12 @@ If you prefer not to use the Makefile:
    npm install
    npx prisma migrate dev --name init
    npx prisma db seed
-   npm run dev
+   # Sign-in is required for writes. Locally, use the dev identity (refused in
+   # production and off loopback; see docs/runbook.md section 10):
+   AUTH_MODE=dev PUBLIC_ORIGIN=http://localhost:5173 DEV_AUTH_EMAIL=dev@example.com npm run dev
    ```
+
+   (`make dev` sets these for you. Open http://localhost:5173/auth/sso once to sign in.)
 
 4. Frontend setup (in a new terminal):
    ```bash
@@ -123,13 +127,19 @@ The app will be available at http://localhost:5173
 |--------|----------|-------------|
 | GET | /api/recipes | List all recipes (optional `?tag=` filter, `?sort=createdAt`; default order is last updated) |
 | GET | /api/recipes/:id | Get single recipe |
-| POST | /api/recipes | Create recipe |
-| PUT | /api/recipes/:id | Partial update: omitted fields, ingredients, directions and tags are unchanged |
-| DELETE | /api/recipes/:id | Delete recipe |
+| POST | /api/recipes | Create recipe (needs a session; filed under the signed-in contributor) |
+| PUT | /api/recipes/:id | Partial update: omitted fields, ingredients, directions and tags are unchanged (needs a session; any contributor may edit) |
+| DELETE | /api/recipes/:id | Delete recipe (needs a session; only the author) |
 | GET | /api/tags | List all tags with recipe counts |
 | GET | /api/tags/:name/recipes | Get recipes by tag |
 | GET | /api/search?q= | Search recipes |
-| POST | /api/import/hellofresh | Import from HelloFresh URL |
+| POST | /api/import/hellofresh | Import from HelloFresh URL (needs a session) |
+| POST | /api/import/hellofresh/preview | Parse a HelloFresh URL without saving (needs a session) |
+| GET | /api/me | Who is signed in: `{ contributor: {id, name} \| null, signInAvailable }` |
+| GET | /auth/sso?next= | Verify the Cloudflare Access assertion and start a session |
+| POST | /auth/logout | End the session (idempotent) |
+
+Every write answers `401` without a session. Reads are public.
 
 Migrations, the deploy/rollback procedure and the database runbook are in [docs/runbook.md](docs/runbook.md).
 

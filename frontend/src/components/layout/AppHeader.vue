@@ -2,6 +2,8 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRecipeStore } from '../../stores/recipeStore'
+import { useMe } from '../../stores/me'
+import { signInUrl } from '../../lib/draft'
 import { appName } from '../../config'
 
 defineEmits(['show-picker'])
@@ -9,6 +11,13 @@ defineEmits(['show-picker'])
 const route = useRoute()
 const router = useRouter()
 const store = useRecipeStore()
+const me = useMe()
+me.ensureLoaded()
+
+async function signOut() {
+  await me.signOut()
+  await router.push('/')
+}
 
 const searchInput = ref('')
 const searchEl = ref(null)
@@ -112,9 +121,26 @@ onBeforeUnmount(() => {
         <button type="button" class="btn btn-secondary !py-[9px] !px-3.5" @click="$emit('show-picker')">
           What the F#@K should I make?
         </button>
-        <router-link to="/create" class="btn btn-primary !text-page no-underline hover:!text-page">
+        <!-- Write controls only for people who can use them. -->
+        <router-link v-if="me.canWrite" to="/create" class="btn btn-primary !text-page no-underline hover:!text-page">
           Add recipe
         </router-link>
+
+        <div v-if="me.me" class="flex items-center gap-3 text-sm text-muted" data-test="identity">
+          <span>Filed as <span class="font-medium text-ink">{{ me.me.name }}</span></span>
+          <button type="button" class="text-muted underline-offset-2 hover:text-ink hover:underline" data-test="sign-out" @click="signOut">
+            Sign out
+          </button>
+        </div>
+        <!-- A full navigation (not a router link): /auth/sso is served by the backend. -->
+        <a
+          v-else-if="me.loaded && me.signInAvailable"
+          :href="signInUrl(route.fullPath)"
+          class="text-sm !text-muted no-underline hover:!text-ink hover:underline"
+          data-test="sign-in"
+        >
+          Sign in
+        </a>
       </div>
     </div>
   </header>
