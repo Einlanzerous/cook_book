@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.2](https://github.com/Einlanzerous/cook_book/compare/v2.1.1...v2.1.2) (2026-11-08)
+
+
+### Bug Fixes
+
+* **ui:** green favicon to match the redesign (COOK-40) ([#17](https://github.com/Einlanzerous/cook_book/issues/17)) ([5121580](https://github.com/Einlanzerous/cook_book/commit/51215804e9c879a4e3fb07e6a06ed021cb5a2913))
+
 ## [2.1.1](https://github.com/Einlanzerous/cook_book/compare/v2.1.0...v2.1.1) (2026-11-08)
 
 
