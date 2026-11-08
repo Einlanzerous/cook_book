@@ -44,6 +44,10 @@ async function fetchRecipe() {
     error.value = 'Paste a recipe link first.'
     return
   }
+  if (/^http:\/\//i.test(value) && isHelloFresh(value.replace(/^http:/i, 'https:'))) {
+    error.value = 'Use the https:// version of that HelloFresh link.'
+    return
+  }
   if (!isHelloFresh(value)) {
     error.value = 'Only HelloFresh links work today. For anything else, use "Write it out".'
     return

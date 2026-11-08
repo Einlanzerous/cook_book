@@ -161,7 +161,7 @@ describe('From a link', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     expect(importApi.previewHelloFresh).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Only HelloFresh links work today')
+    expect(wrapper.text()).toContain('Use the https:// version of that HelloFresh link')
   })
 
   it('shows the server error when the page cannot be fetched', async () => {
