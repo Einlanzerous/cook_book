@@ -9,6 +9,7 @@ import {
   prepareIngredients,
   scalarData
 } from '../services/recipeWrite.js';
+import { boundedString, MAX_LIST_RESULTS, MAX_TAG_LENGTH } from '../middleware/readLimits.js';
 import { assertCanEdit, assertCanDelete } from '../services/ownership.js';
 
 const router = Router();
@@ -17,7 +18,8 @@ const router = Router();
 // ?sort=createdAt gives "Recently added".
 router.get('/', async (req, res, next) => {
   try {
-    const { tag, sort } = req.query;
+    const tag = boundedString(req.query.tag, 'tag', MAX_TAG_LENGTH);
+    const { sort } = req.query;
 
     const where = tag ? {
       tags: { some: { name: { equals: tag, mode: 'insensitive' } } }
@@ -26,7 +28,8 @@ router.get('/', async (req, res, next) => {
     const recipes = await req.prisma.recipe.findMany({
       where,
       include: recipeInclude,
-      orderBy: sort === 'createdAt' ? { createdAt: 'desc' } : { updatedAt: 'desc' }
+      orderBy: sort === 'createdAt' ? { createdAt: 'desc' } : { updatedAt: 'desc' },
+      take: MAX_LIST_RESULTS
     });
 
     res.json(recipes.map(presentRecipe));

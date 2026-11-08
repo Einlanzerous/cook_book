@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { boundedString, MAX_LIST_RESULTS, MAX_TAG_LENGTH } from '../middleware/readLimits.js';
 import { recipeInclude, presentRecipe } from '../services/recipeShape.js';
 
 const router = Router();
@@ -37,11 +38,14 @@ router.get('/', async (req, res, next) => {
 // Get recipes by tag name
 router.get('/:name/recipes', async (req, res, next) => {
   try {
+    const name = boundedString(req.params.name, 'name', MAX_TAG_LENGTH);
     const tag = await req.prisma.tag.findUnique({
-      where: { name: req.params.name },
+      where: { name },
       include: {
         recipes: {
-          include: recipeInclude
+          include: recipeInclude,
+          orderBy: { updatedAt: 'desc' },
+          take: MAX_LIST_RESULTS
         }
       }
     });

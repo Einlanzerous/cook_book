@@ -24,7 +24,11 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
+  // A 4xx raised on purpose (HttpError, body-parser) carries a message meant
+  // for the caller. Anything else is a 500 whose message may be Prisma or
+  // internal text: it is logged above, and the body is fixed.
+  const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
+  res.status(status).json({
+    error: status === 500 ? 'Internal server error' : err.message || 'Bad request'
   });
 }
