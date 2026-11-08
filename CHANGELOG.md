@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/Einlanzerous/cook_book/compare/v2.0.0...v2.1.0) (2026-11-08)
+
+
+### Features
+
+* **auth:** contributor identity and gated writes (COOK-23) ([#13](https://github.com/Einlanzerous/cook_book/issues/13)) ([2e42e7a](https://github.com/Einlanzerous/cook_book/commit/2e42e7a2738b9cfde0bc7b110a95cb4eac893d6b))
+
 ## [2.0.0](https://github.com/Einlanzerous/cook_book/compare/v1.2.1...v2.0.0) (2026-11-07)
 
 
