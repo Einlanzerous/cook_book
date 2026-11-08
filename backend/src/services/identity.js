@@ -14,7 +14,7 @@
  * the database only here, from a verified assertion.
  *
  * Prisma P2002 shapes (verified against Postgres 16 / Prisma 5, COOK-23
- * verify-first row, and pinned by test/identity.test.js):
+ * verify-first row, and pinned by backend/test/auth.api.test.js):
  *   - unique on email:                 meta.target = ['email']
  *   - unique on externalId:            meta.target = ['externalId']
  *   - raw index Contributor_lower_name_key:  meta.target = ['lower(name)']

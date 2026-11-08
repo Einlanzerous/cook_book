@@ -29,7 +29,7 @@ const preview = ref(null)
 function isHelloFresh(value) {
   try {
     const u = new URL(value.trim())
-    return /^https?:$/.test(u.protocol) && (u.hostname === 'hellofresh.com' || u.hostname.endsWith('.hellofresh.com'))
+    return u.protocol === 'https:' && (u.hostname === 'hellofresh.com' || u.hostname.endsWith('.hellofresh.com'))
   } catch {
     return false
   }
