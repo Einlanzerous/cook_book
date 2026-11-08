@@ -347,3 +347,24 @@ Whether Traefik forwards `Cf-Access-Jwt-Assertion` to `cook_book`, and container
 egress to the Access certs URL, are only confirmable live. The failure signal for
 the first is the log line `auth.sso reject reason=missing`. The named live check
 is in the COOK-23 plan.
+
+### Public read hardening (COOK-41)
+
+Once Phase 2 opens the reads to anonymous callers, the app bounds them itself
+(`backend/src/middleware/readLimits.js`); request-rate limiting is a Cloudflare
+rate-limiting rule on `/api/*` for the host, not an in-app limiter.
+
+- **Result cap:** `GET /api/recipes`, `GET /api/search` and
+  `GET /api/tags/:name/recipes` return at most `MAX_LIST_RESULTS` = 500 recipes
+  (newest first). It is a hard cap with no pagination; revisit when the library
+  nears it.
+- **Input caps:** `?q=` at most 200 characters; `?tag=` and the `:name` of
+  `/api/tags/:name/recipes` at most 100. Over-length is 400.
+- **Query shape:** under `/api`, every query value must be a single string
+  (`?tag[a]=b`, `?q[]=x`, `?q=a&q=b` are 400 and never reach Prisma). The one
+  exception is `exclude` on `/api/recipes/random`, which may repeat.
+- **500s:** the body is always `{"error":"Internal server error"}`; the detail is
+  only in the container log. 409 and 404 bodies are unchanged.
+- **Indexing:** every response carries `X-Robots-Tag: noindex, nofollow` and
+  `/robots.txt` is `Disallow: /` for all agents.
+- **Connect screen** (`/connect`) is public and read-only; a frontend test pins it.

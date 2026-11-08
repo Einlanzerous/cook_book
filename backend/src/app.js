@@ -11,6 +11,7 @@ import { createAuthRouter, createMeRouter } from './routes/auth.js';
 import { createWriteGuard } from './middleware/writeGuard.js';
 import { recipeInclude, presentRecipe } from './services/recipeShape.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { queryShapeGuard, boundedString, MAX_LIST_RESULTS, MAX_QUERY_LENGTH } from './middleware/readLimits.js';
 import { resolveBuildIdentity } from './buildIdentity.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +48,15 @@ export function createApp({ prisma, config, verifyAccess, jsonParser = express.j
   // No cors(): the SPA is same-origin, so no Access-Control-Allow-Origin is
   // ever sent (COOK-23, "Cross-origin reads" ruling).
 
+  // Indexing ruling (COOK-41): the public site is not for search engines.
+  app.use((req, res, next) => {
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+    next();
+  });
+  app.get('/robots.txt', (req, res) => {
+    res.type('text/plain').send('User-agent: *\nDisallow: /\n');
+  });
+
   // Make prisma available to routes and the guard.
   app.use((req, res, next) => {
     req.prisma = prisma;
@@ -58,6 +68,10 @@ export function createApp({ prisma, config, verifyAccess, jsonParser = express.j
   app.post('/auth/logout', createWriteGuard({ config, log, requireSession: false }));
 
   app.use(jsonParser);
+
+  // Non-string query values (?tag[a]=b, ?q[]=x, repeated keys) are 400 before
+  // any route or Prisma sees them.
+  app.use('/api', queryShapeGuard);
 
   // Sign-in lives outside /api and ahead of the SPA catch-all below.
   app.use('/auth', createAuthRouter({ config, verifyAccess, log }));
@@ -78,7 +92,7 @@ export function createApp({ prisma, config, verifyAccess, jsonParser = express.j
   // Search endpoint
   app.get('/api/search', async (req, res, next) => {
     try {
-      const { q } = req.query;
+      const q = boundedString(req.query.q, 'q', MAX_QUERY_LENGTH);
 
       if (!q || q.trim() === '') {
         return res.json([]);
@@ -96,7 +110,8 @@ export function createApp({ prisma, config, verifyAccess, jsonParser = express.j
           ]
         },
         include: recipeInclude,
-        orderBy: { updatedAt: 'desc' }
+        orderBy: { updatedAt: 'desc' },
+        take: MAX_LIST_RESULTS
       });
 
       res.json(recipes.map(presentRecipe));
