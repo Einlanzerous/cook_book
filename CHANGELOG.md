@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/Einlanzerous/cook_book/compare/v2.1.2...v2.2.0) (2026-11-08)
+
+
+### Features
+
+* **api:** harden public reads: caps, query-shape 400s, generic 500, noindex (COOK-41) ([#19](https://github.com/Einlanzerous/cook_book/issues/19)) ([da353be](https://github.com/Einlanzerous/cook_book/commit/da353be15d25b863398f7ab31aca8df83912a79d))
+
 ## [2.1.2](https://github.com/Einlanzerous/cook_book/compare/v2.1.1...v2.1.2) (2026-11-08)
 
 
