@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { scaleIngredient, servingOptions } from '../../lib/quantity'
+import { scaleIngredient, servingOptions } from '../../../../shared/quantity.js'
 
 const props = defineProps({
   ingredients: {

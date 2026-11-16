@@ -105,3 +105,70 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # COOK-48: the unit tests import shared/ from the checkout, where the paths
+  # always line up. This proves they line up in the built image too: it boots
+  # (migrations included) and the shared module imports from where the backend
+  # resolves it.
+  image-boot:
+    runs-on: ubuntu-latest
+    needs: [validate, test]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: cook_book_boot
+        ports:
+          - "127.0.0.1::5432"
+        options: >-
+          --mount type=tmpfs,destination=/var/lib/postgresql/data,tmpfs-size=1g
+          --health-cmd "pg_isready -U postgres -d cook_book_boot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t cook-book:boot-check .
+
+      - name: Boot the image against the scratch Postgres
+        env:
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+        run: |
+          test -n "$PGPORT" || { echo "service port not assigned"; exit 1; }
+          # Host networking so the container reaches the loopback-bound service.
+          # Access mode needs a team domain and audience to pass config
+          # validation; neither is contacted at boot.
+          docker run -d --name boot-check --network host \
+            -e PORT=3000 \
+            -e DATABASE_URL="postgresql://postgres@127.0.0.1:${PGPORT}/cook_book_boot?schema=public" \
+            -e AUTH_MODE=access \
+            -e PUBLIC_ORIGIN=https://boot-check.example.test \
+            -e CF_ACCESS_TEAM_DOMAIN=boot-check.cloudflareaccess.com \
+            -e CF_ACCESS_AUD=boot-check \
+            cook-book:boot-check
+          code=000
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health || true)
+            [ "$code" = 200 ] && break
+            sleep 2
+          done
+          if [ "$code" != 200 ]; then
+            echo "/api/health never returned 200 (last: $code)"
+            docker logs boot-check
+            exit 1
+          fi
+
+      - name: Import the shared module inside the container
+        run: |
+          # The backend re-export resolves ../../../shared from /app/src/services,
+          # which is /shared in the image (backend sits at /app, not /app/backend).
+          # stderr must be empty: shared/package.json ("type": "module") keeps
+          # Node from printing MODULE_TYPELESS_PACKAGE_JSON when it re-parses.
+          err=$(docker exec boot-check node -e "import('/app/src/services/quantity.js').then(m => { if (typeof m.deriveQuantity !== 'function') process.exit(1) })" 2>&1 >/dev/null)
+          test -z "$err" || { echo "unexpected stderr: $err"; exit 1; }
+          err=$(docker exec boot-check node -e "import('/shared/quantity.js')" 2>&1 >/dev/null)
+          test -z "$err" || { echo "unexpected stderr: $err"; exit 1; }
