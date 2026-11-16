@@ -368,3 +368,44 @@ rate-limiting rule on `/api/*` for the host, not an in-app limiter.
 - **Indexing:** every response carries `X-Robots-Tag: noindex, nofollow` and
   `/robots.txt` is `Disallow: /` for all agents.
 - **Connect screen** (`/connect`) is public and read-only; a frontend test pins it.
+
+## 11. The MCP listener (COOK-49)
+
+Commonplace is a backend of heitan, the estate MCP gateway. The MCP server is a
+second, plain Express listener in the same process (`backend/src/mcp/`), on its
+own internal port. It is **not** mounted on the web port and has no Traefik
+router, so `/mcp` on the public host is still the SPA catch-all.
+
+| Env | Meaning |
+|---|---|
+| `CF_ACCESS_GATEWAY_AUD` | heitan's Access audience, accepted on the MCP listener only. Exactly one value, and never equal to `CF_ACCESS_AUD`: boot refuses both. **Unset = the listener is off** (one log line, `mcp: disabled (CF_ACCESS_GATEWAY_AUD unset)`). |
+| `MCP_PORT` | default 4002. Must differ from `PORT`. Do not publish it in compose: heitan reaches `http://cook_book:4002/mcp` over `construct_net`. |
+
+**Production** enables it only when COOK-52 (construct-server) sets
+`CF_ACCESS_GATEWAY_AUD`; until then the release is inert. Rollback: unset the
+variable (the listener goes off; the web app is unaffected).
+
+**Auth, per request.** Exactly one `Cf-Access-Jwt-Assertion`, verified against
+the gateway audience with the same JWKS the web verifier uses; no other `Cf-*`
+header is read. Any problem is a `401` with one fixed body (heitan does not
+retry a 401), logged as `mcp.auth reject reason=<reason>` (rate-limited per
+reason). The one exception is the Access certs URL being unreachable: `503`.
+`create_recipe` files under a contributor who has **already signed in on the
+web**: it matches the assertion's `sub` to `externalId`, else the email of a row
+whose `externalId` is set. It never creates a contributor or binds an identity;
+anyone else gets "not signed in yet" with the `/auth/sso` link. Audit trail:
+`mcp.create recipe=<id> contributor=<id> matched=sub|email`; `matched=email`
+means heitan's `sub` differs from the web one.
+
+**Try it locally** (dev mode: the MCP listener binds 127.0.0.1 and the caller is
+`DEV_AUTH_EMAIL`, which must already be a signed-in contributor to write):
+
+```sh
+make dev                      # web on :3000, MCP on 127.0.0.1:4002
+curl -s localhost:4002/healthz
+claude mcp add --transport http commonplace http://localhost:4002/mcp
+```
+
+**Measurement.** `node backend/src/mcp/stdio.js` serves `tools/list` only, with
+no Prisma and no `DATABASE_URL`; heitan's `measure-bundles` and construct-server's
+`mcp-tools-baseline` read the tool list from it. Every call over stdio is an error.
