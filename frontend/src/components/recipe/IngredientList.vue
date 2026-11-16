@@ -67,19 +67,25 @@ function toggle(id) {
       </div>
     </div>
 
-    <ul v-if="rows.length" class="flex flex-col">
-      <li v-for="row in rows" :key="row.id">
+    <!-- One grid for the whole list; each row is a subgrid, so the checkbox, quantity
+         and name columns share the same widths on every row (COOK-57). -->
+    <ul
+      v-if="rows.length"
+      data-test="ingredient-grid"
+      class="grid grid-cols-[18px_calc(16ch+1rem)_minmax(0,1fr)]"
+    >
+      <li v-for="row in rows" :key="row.id" class="col-span-3 grid grid-cols-subgrid">
         <button
           type="button"
           :aria-pressed="!!checked[row.id]"
-          class="grid w-full grid-cols-[18px_minmax(72px,auto)_1fr] items-baseline gap-3 border-b border-rule-soft py-[11px] text-left text-[15px]"
+          class="col-span-3 grid grid-cols-subgrid items-stretch border-b border-rule-soft text-left text-[15px]"
           @click="toggle(row.id)"
         >
           <span
             :class="['h-[14px] w-[14px] self-center rounded-[2px] border border-fir', checked[row.id] ? 'bg-fir' : 'bg-transparent']"
           ></span>
-          <span class="font-semibold tabular-nums text-fir" data-test="qty">{{ row.qty }}</span>
-          <span :class="checked[row.id] ? 'text-faint line-through' : 'text-ink'">{{ row.name }}</span>
+          <span class="break-words bg-fir-tint px-2 py-[11px] font-semibold tabular-nums text-fir" data-test="qty">{{ row.qty }}</span>
+          <span :class="['break-words py-[11px] pl-3', checked[row.id] ? 'text-faint line-through' : 'text-ink']" data-test="name">{{ row.name }}</span>
         </button>
       </li>
     </ul>
