@@ -11,6 +11,7 @@ import { describeDb, createScratchDb } from './helpers/db.js';
 import { createTestApp, authed } from './helpers/auth.js';
 import { searchRecipes, getRecipe, createRecipe, assertWithinLimits, LIMITS } from '../src/services/recipes.js';
 import { HttpError } from '../src/services/recipeWrite.js';
+import { MAX_QUERY_LENGTH, MAX_TAG_LENGTH, MAX_ID_LENGTH } from '../src/middleware/readLimits.js';
 
 const rep = (n) => 'x'.repeat(n);
 const valid = (over = {}) => ({ title: 'Soup', ingredients: [{ name: 'Water' }], directions: ['Boil'], tags: ['Quick'], ...over });
@@ -24,6 +25,8 @@ const overLimit = [
   ['direction (string)', { directions: [rep(LIMITS.directionText + 1)] }],
   ['direction (object)', { directions: [{ instruction: rep(LIMITS.directionText + 1) }] }],
   ['ingredient count', { ingredients: Array.from({ length: LIMITS.ingredients + 1 }, () => ({ name: 'a' })) }],
+  ['ingredient unit', { ingredients: [{ name: 'a', unit: rep(LIMITS.ingredientText + 1) }] }],
+  ['direction heading', { directions: [{ instruction: 'a', heading: rep(LIMITS.directionText + 1) }] }],
   ['direction count', { directions: Array.from({ length: LIMITS.directions + 1 }, () => 'step') }],
   ['tag count', { tags: Array.from({ length: LIMITS.tags + 1 }, (_, i) => `t${i}`) }],
   ['tag length', { tags: [rep(LIMITS.tagLength + 1)] }]
@@ -52,6 +55,21 @@ describe('write limits (no database)', () => {
     const prisma = { recipe: { create: vi.fn(async ({ data }) => ({ id: 'r1', title: data.title, ingredients: [], directions: [], tags: [], contributor: null })) } };
     await createRecipe(prisma, { id: 'real' }, valid({ contributorId: 'spoofed' }));
     expect(prisma.recipe.create.mock.calls[0][0].data.contributorId).toBe('real');
+  });
+
+  it('searchRecipes enforces the string caps itself (inherited by the MCP tool)', async () => {
+    const prisma = { recipe: { findMany: vi.fn() } };
+    for (const params of [
+      { q: rep(MAX_QUERY_LENGTH + 1) },
+      { ingredient: rep(MAX_QUERY_LENGTH + 1) },
+      { tag: rep(MAX_TAG_LENGTH + 1) },
+      { contributorId: rep(MAX_ID_LENGTH + 1) }
+    ]) {
+      const err = await searchRecipes(prisma, params).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpError);
+      expect(err.status).toBe(400);
+    }
+    expect(prisma.recipe.findMany).not.toHaveBeenCalled();
   });
 
   it('searchRecipes answers [] with no query and no filter, and rejects a bad limit', async () => {

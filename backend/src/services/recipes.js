@@ -16,7 +16,7 @@ import {
   prepareIngredients,
   scalarData
 } from './recipeWrite.js';
-import { MAX_LIST_RESULTS } from '../middleware/readLimits.js';
+import { boundedString, MAX_LIST_RESULTS, MAX_QUERY_LENGTH, MAX_TAG_LENGTH, MAX_ID_LENGTH } from '../middleware/readLimits.js';
 
 /** Length caps on writes (COOK-47). Over any of them is a 400 and nothing is written. */
 export const LIMITS = {
@@ -97,9 +97,11 @@ export async function searchRecipes(
   prisma,
   { q, ingredient, tag, contributorId, maxMinutes, vegetarian, limit } = {}
 ) {
-  const term = typeof q === 'string' ? q.trim() : '';
-  const ingredientTerm = typeof ingredient === 'string' ? ingredient.trim() : '';
-  const tagTerm = typeof tag === 'string' ? tag.trim() : '';
+  // The string caps live here so every caller (REST, MCP) inherits them.
+  const term = boundedString(q, 'q', MAX_QUERY_LENGTH)?.trim() ?? '';
+  const ingredientTerm = boundedString(ingredient, 'ingredient', MAX_QUERY_LENGTH)?.trim() ?? '';
+  const tagTerm = boundedString(tag, 'tag', MAX_TAG_LENGTH)?.trim() ?? '';
+  boundedString(contributorId, 'contributor', MAX_ID_LENGTH);
   const hasMinutes = maxMinutes !== undefined && maxMinutes !== null;
 
   if (!term && !ingredientTerm && !tagTerm && !contributorId && !hasMinutes && !vegetarian) return [];

@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { searchRecipes } from '../services/recipes.js';
 import { HttpError } from '../services/recipeWrite.js';
-import { boundedString, MAX_QUERY_LENGTH, MAX_TAG_LENGTH, MAX_ID_LENGTH } from '../middleware/readLimits.js';
 
 const router = Router();
 
@@ -11,10 +10,8 @@ const truthy = (v) => ['1', 'true', 'yes'].includes(String(v ?? '').toLowerCase(
 // Every parameter is optional; the response is the same recipe array as before.
 router.get('/', async (req, res, next) => {
   try {
-    const q = boundedString(req.query.q, 'q', MAX_QUERY_LENGTH);
-    const ingredient = boundedString(req.query.ingredient, 'ingredient', MAX_QUERY_LENGTH);
-    const tag = boundedString(req.query.tag, 'tag', MAX_TAG_LENGTH);
-    const contributorId = boundedString(req.query.contributor, 'contributor', MAX_ID_LENGTH);
+    // String caps (q, ingredient, tag, contributor) are enforced in searchRecipes.
+    const { q, ingredient, tag, contributor: contributorId } = req.query;
 
     let maxMinutes;
     const m = req.query.maxMinutes;
