@@ -12,6 +12,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // shared/ (COOK-48) sits beside frontend/, outside the dev server's root.
+    fs: { allow: ['..'] },
     proxy: {
       '/api': {
         target: apiTarget,

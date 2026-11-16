@@ -4,6 +4,9 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+# shared/ sits beside frontend/ in the checkout; frontend imports it as
+# ../../../shared from src/lib, which is /app/shared here (COOK-48).
+COPY shared/ /app/shared/
 RUN npm run build
 
 # Stage 2: Production
@@ -18,6 +21,11 @@ RUN npm ci --omit=dev
 
 # Copy backend source and prisma schema
 COPY backend/ ./
+
+# shared/ sits beside backend/ in the checkout, and backend/src/services/quantity.js
+# imports ../../../shared. The backend lives at /app (not /app/backend) in this
+# image, so that same relative path lands at /shared, not /app/shared (COOK-48).
+COPY shared/ /shared/
 
 # Generate Prisma client
 RUN npx prisma generate

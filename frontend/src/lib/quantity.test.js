@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { parseAmount, formatQuantity, scaleIngredient, servingOptions, SNAP_TOLERANCE } from './quantity'
+import { parseAmount, deriveQuantity, normalizeAmount, formatQuantity, scaleIngredient, servingOptions, SNAP_TOLERANCE } from '../../../shared/quantity.js'
+import fixture from '../../../shared/quantity-fixture.json'
 import { formatMinutes, formatDate } from './format'
 
 describe('parseAmount', () => {
@@ -112,5 +113,17 @@ describe('format helpers', () => {
     expect(formatDate('2026-03-31T23:59:00Z')).toBe('31 Mar 2026')
     expect(formatDate(null)).toBeNull()
     expect(formatDate('nope')).toBeNull()
+  })
+})
+
+// COOK-48: the same fixture the backend suite iterates, against the one shared module.
+describe('shared/quantity-fixture.json (parsed, derived, normalized, scaled)', () => {
+  it.each(fixture.cases.map((c) => [JSON.stringify(c.amount), c]))('%s', (_label, c) => {
+    expect(parseAmount(c.amount)).toBe(c.parsed)
+    expect(deriveQuantity(c.amount)).toBe(c.derived)
+    expect(normalizeAmount(c.amount)).toBe(c.normalized)
+    for (const { multiplier, ...expected } of c.scale) {
+      expect(scaleIngredient({ amount: c.amount, unit: c.unit, quantity: c.quantity }, multiplier)).toEqual(expected)
+    }
   })
 })

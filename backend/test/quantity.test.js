@@ -1,5 +1,7 @@
+import fs from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { deriveQuantity, normalizeAmount, prepareIngredient } from '../src/services/quantity.js';
+import { parseAmount, scaleIngredient } from '../../shared/quantity.js';
 
 describe('deriveQuantity (criterion 4)', () => {
   it.each([
@@ -76,5 +78,26 @@ describe('prepareIngredient precedence', () => {
   });
   it('accepts a numeric amount', () => {
     expect(prepareIngredient({ name: 'x', amount: 3 })).toMatchObject({ amount: '3', quantity: 3 });
+  });
+});
+
+// COOK-48: the same fixture the frontend suite iterates, against the one shared module.
+const fixture = JSON.parse(fs.readFileSync(new URL('../../shared/quantity-fixture.json', import.meta.url), 'utf8'));
+
+describe('shared/quantity-fixture.json (parsed, derived, normalized, scaled)', () => {
+  it.each(fixture.cases.map((c) => [JSON.stringify(c.amount), c]))('%s', (_label, c) => {
+    expect(parseAmount(c.amount)).toBe(c.parsed);
+    expect(deriveQuantity(c.amount)).toBe(c.derived);
+    expect(normalizeAmount(c.amount)).toBe(c.normalized);
+    for (const { multiplier, ...expected } of c.scale) {
+      expect(scaleIngredient({ amount: c.amount, unit: c.unit, quantity: c.quantity }, multiplier)).toEqual(expected);
+    }
+  });
+
+  it('flags ranges, words and thumb-style amounts as unscaled', () => {
+    for (const amount of ['2-3', 'a pinch', '1 thumb']) {
+      const c = fixture.cases.find((x) => x.amount === amount && x.quantity === undefined);
+      expect(c.scale.every((r) => r.scaled === false && r.amount === amount)).toBe(true);
+    }
   });
 });
