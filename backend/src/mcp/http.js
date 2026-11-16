@@ -14,8 +14,9 @@
  *
  * Stateless: a fresh McpServer and transport per request, closed when the
  * response closes (sessionIdGenerator: undefined). heitan sends `server/discover`
- * first and expects a 400, then initialize; the transport answers that 400
- * for a sessionless request that is not an initialize.
+ * first and expects a 400, then initialize. The stateless transport does NOT
+ * produce that 400 (it skips session checks, so any sessionless request is
+ * served); the POST handler answers `server/discover` with an explicit 400.
  */
 import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -167,10 +168,20 @@ export async function startMcp(config, deps) {
   const host = config.authMode === 'dev' ? '127.0.0.1' : '0.0.0.0';
   const port = deps.port ?? config.mcpPort;
 
-  const server = await new Promise((resolve, reject) => {
-    const s = app.listen(port, host, () => resolve(s));
-    s.once('error', reject);
-  });
+  let server;
+  try {
+    server = await new Promise((resolve, reject) => {
+      const s = app.listen(port, host, () => resolve(s));
+      s.once('error', reject);
+    });
+  } catch (err) {
+    // Access mode: a listener that was asked for and cannot bind is a boot
+    // failure. Dev mode: MCP is a side feature of `make dev`, so a taken port
+    // must not stop the web backend; say so and carry on without it.
+    if (config.authMode !== 'dev') throw err;
+    log(`mcp: disabled (cannot listen on ${host}:${port}: ${err.code ?? err.name}; set MCP_PORT to use another)`);
+    return null;
+  }
   const bound = server.address().port;
   log(`mcp: listening on ${host}:${bound} (auth mode: ${config.authMode})`);
   return {

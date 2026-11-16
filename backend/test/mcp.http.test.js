@@ -148,6 +148,31 @@ describe('MCP listener: dev mode', () => {
   });
 });
 
+describe('a port that cannot be bound', () => {
+  const dev = { AUTH_MODE: 'dev', PUBLIC_ORIGIN: 'http://localhost:5173', DEV_AUTH_EMAIL: 'dev@example.com' };
+  let first;
+  afterEach(async () => {
+    await first?.close();
+  });
+
+  it('dev mode logs and carries on without MCP', async () => {
+    first = await createMcpKit({ prisma: untouchablePrisma().prisma, env: dev });
+    const kit = await createAuthKit(dev);
+    const logs = [];
+    const mcp = await startMcp(kit.config, { prisma: untouchablePrisma().prisma, log: (l) => logs.push(l), port: first.mcp.port });
+    expect(mcp).toBeNull();
+    expect(logs.join('\n')).toMatch(/mcp: disabled \(cannot listen on 127\.0\.0\.1:\d+: EADDRINUSE/);
+  });
+
+  it('access mode refuses to boot', async () => {
+    first = await createMcpKit({ prisma: untouchablePrisma().prisma });
+    const kit = await createAuthKit({ CF_ACCESS_GATEWAY_AUD: GATEWAY_AUD });
+    await expect(
+      startMcp(kit.config, { prisma: untouchablePrisma().prisma, verifyGateway: async () => ({}), log: () => {}, port: first.mcp.port })
+    ).rejects.toMatchObject({ code: 'EADDRINUSE' });
+  });
+});
+
 describe('criterion 15: stdio.js', () => {
   const stdio = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/mcp/stdio.js');
 

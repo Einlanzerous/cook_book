@@ -398,7 +398,10 @@ anyone else gets "not signed in yet" with the `/auth/sso` link. Audit trail:
 means heitan's `sub` differs from the web one.
 
 **Try it locally** (dev mode: the MCP listener binds 127.0.0.1 and the caller is
-`DEV_AUTH_EMAIL`, which must already be a signed-in contributor to write):
+`DEV_AUTH_EMAIL`, which must already be a signed-in contributor to write). If
+4002 is taken, dev mode logs `mcp: disabled (cannot listen ...)` and the web
+backend carries on; set `MCP_PORT` to use another. In access mode a port that
+cannot be bound stops the process.
 
 ```sh
 make dev                      # web on :3000, MCP on 127.0.0.1:4002
