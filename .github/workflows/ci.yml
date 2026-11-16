@@ -166,5 +166,9 @@ jobs:
         run: |
           # The backend re-export resolves ../../../shared from /app/src/services,
           # which is /shared in the image (backend sits at /app, not /app/backend).
-          docker exec boot-check node -e "import('/app/src/services/quantity.js').then(m => { if (typeof m.deriveQuantity !== 'function') process.exit(1) })"
-          docker exec boot-check node -e "import('/shared/quantity.js')"
+          # stderr must be empty: shared/package.json ("type": "module") keeps
+          # Node from printing MODULE_TYPELESS_PACKAGE_JSON when it re-parses.
+          err=$(docker exec boot-check node -e "import('/app/src/services/quantity.js').then(m => { if (typeof m.deriveQuantity !== 'function') process.exit(1) })" 2>&1 >/dev/null)
+          test -z "$err" || { echo "unexpected stderr: $err"; exit 1; }
+          err=$(docker exec boot-check node -e "import('/shared/quantity.js')" 2>&1 >/dev/null)
+          test -z "$err" || { echo "unexpected stderr: $err"; exit 1; }
