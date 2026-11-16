@@ -49,7 +49,17 @@ export function loadConfig(env = process.env) {
 
   const ssoEnabled = env.SSO_ENABLED === undefined ? true : String(env.SSO_ENABLED).toLowerCase() !== 'false';
 
+  // The MCP listener's port (COOK-49). Internal: never published, never routed.
+  const mcpPortRaw = env.MCP_PORT === undefined || env.MCP_PORT === '' ? '4002' : String(env.MCP_PORT).trim();
+  const mcpPort = /^\d+$/.test(mcpPortRaw) ? Number(mcpPortRaw) : NaN;
+  if (!Number.isInteger(mcpPort) || mcpPort < 1 || mcpPort > 65535) {
+    throw new ConfigError('MCP_PORT must be a port number (1-65535)');
+  }
+  const webPort = env.PORT === undefined || env.PORT === '' ? 3000 : Number(env.PORT);
+  if (mcpPort === webPort) throw new ConfigError('MCP_PORT must differ from PORT: the MCP listener is a separate internal port');
+
   const config = {
+    mcpPort,
     authMode,
     publicOrigin: publicUrl.origin,
     sessionDays,
@@ -82,5 +92,19 @@ export function loadConfig(env = process.env) {
     throw new ConfigError('CF_ACCESS_AUD is required');
   }
   config.audience = env.CF_ACCESS_AUD.trim();
+
+  // heitan's audience, accepted on the MCP listener only (COOK-49). Optional:
+  // unset leaves the MCP listener off. Exactly one value, and never the web
+  // audience: sharing it would let a web-app assertion call the MCP surface.
+  const gateway = (env.CF_ACCESS_GATEWAY_AUD ?? '').trim();
+  if (gateway) {
+    if (/[\s,]/.test(gateway)) {
+      throw new ConfigError('CF_ACCESS_GATEWAY_AUD must hold exactly one audience (no commas or whitespace)');
+    }
+    if (gateway === config.audience) {
+      throw new ConfigError('CF_ACCESS_GATEWAY_AUD must differ from CF_ACCESS_AUD');
+    }
+    config.gatewayAudience = gateway;
+  }
   return config;
 }
