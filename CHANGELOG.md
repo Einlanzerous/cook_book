@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.0](https://github.com/Einlanzerous/cook_book/compare/v2.2.0...v2.3.0) (2026-11-16)
+
+
+### Features
+
+* **api:** recipe service layer and search filters (COOK-47) ([#22](https://github.com/Einlanzerous/cook_book/issues/22)) ([26bae8e](https://github.com/Einlanzerous/cook_book/commit/26bae8e14eca6c7b4806f21ec90d43d50faf533e))
+
+
+### Bug Fixes
+
+* **quantity:** one shared parsing and scaling module (COOK-48) ([#21](https://github.com/Einlanzerous/cook_book/issues/21)) ([cbaed82](https://github.com/Einlanzerous/cook_book/commit/cbaed82fde25f48561824faea39cabeda314c551))
+
 ## [2.2.0](https://github.com/Einlanzerous/cook_book/compare/v2.1.2...v2.2.0) (2026-11-08)
 
 
