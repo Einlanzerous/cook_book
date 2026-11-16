@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/Einlanzerous/cook_book/compare/v2.4.0...v2.4.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **recipe:** extend the quantity tint band across the checkbox column (COOK-61) ([#27](https://github.com/Einlanzerous/cook_book/issues/27)) ([a9aa904](https://github.com/Einlanzerous/cook_book/commit/a9aa9044c6ae93a0feb43e042f3e0c2dc6e5a4bc))
+
 ## [2.4.0](https://github.com/Einlanzerous/cook_book/compare/v2.3.0...v2.4.0) (2026-11-16)
 
 
