@@ -72,7 +72,7 @@ function toggle(id) {
     <ul
       v-if="rows.length"
       data-test="ingredient-grid"
-      class="grid grid-cols-[18px_calc(16ch+1rem)_minmax(0,1fr)]"
+      class="grid grid-cols-[30px_calc(16ch+1rem)_minmax(0,1fr)]"
     >
       <li v-for="row in rows" :key="row.id" class="col-span-3 grid grid-cols-subgrid">
         <button
@@ -81,9 +81,15 @@ function toggle(id) {
           class="col-span-3 grid grid-cols-subgrid items-stretch border-b border-rule-soft text-left text-[15px]"
           @click="toggle(row.id)"
         >
-          <span
-            :class="['h-[14px] w-[14px] self-center rounded-[2px] border border-fir', checked[row.id] ? 'bg-fir' : 'bg-transparent']"
-          ></span>
+          <!-- Column 1 carries the same tint as the quantity, so the two cells read as one band
+               (COOK-61). The box sits 12px in and lines up with the first text line (11px row
+               padding + half the 22.5px line, less half the 14px box). -->
+          <span class="bg-fir-tint pl-3 pt-[15px]" data-test="check">
+            <span
+              :class="['block h-[14px] w-[14px] rounded-[2px] border border-fir', checked[row.id] ? 'bg-fir' : 'bg-transparent']"
+              data-test="box"
+            ></span>
+          </span>
           <span class="break-words bg-fir-tint px-2 py-[11px] font-semibold tabular-nums text-fir" data-test="qty">{{ row.qty }}</span>
           <span :class="['break-words py-[11px] pl-3', checked[row.id] ? 'text-faint line-through' : 'text-ink']" data-test="name">{{ row.name }}</span>
         </button>
