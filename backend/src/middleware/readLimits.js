@@ -16,6 +16,8 @@ export const MAX_LIST_RESULTS = 500;
 // labels and search terms are a few words; anything longer is not a real query.
 export const MAX_QUERY_LENGTH = 200;
 export const MAX_TAG_LENGTH = 100;
+// Longest accepted contributor id filter (ids are 25-character cuids).
+export const MAX_ID_LENGTH = 100;
 
 // Query keys that may be repeated (an array of strings). Everything else must be
 // one plain string. `exclude` is the random picker's id list and is already

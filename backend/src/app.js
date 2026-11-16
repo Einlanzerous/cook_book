@@ -3,15 +3,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import randomRouter from './routes/random.js';
 import recipesRouter from './routes/recipes.js';
+import searchRouter from './routes/search.js';
 import tagsRouter from './routes/tags.js';
 import importRouter from './routes/import.js';
 import importPreviewRouter from './routes/importPreview.js';
 import contributorsRouter from './routes/contributors.js';
 import { createAuthRouter, createMeRouter } from './routes/auth.js';
 import { createWriteGuard } from './middleware/writeGuard.js';
-import { recipeInclude, presentRecipe } from './services/recipeShape.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { queryShapeGuard, boundedString, MAX_LIST_RESULTS, MAX_QUERY_LENGTH } from './middleware/readLimits.js';
+import { queryShapeGuard } from './middleware/readLimits.js';
 import { resolveBuildIdentity } from './buildIdentity.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -82,43 +82,13 @@ export function createApp({ prisma, config, verifyAccess, jsonParser = express.j
   // Before recipesRouter, or '/:id' would swallow 'random'.
   mountApi('/recipes/random', randomRouter);
   mountApi('/recipes', recipesRouter);
+  mountApi('/search', searchRouter);
   mountApi('/tags', tagsRouter);
   mountApi('/import', importPreviewRouter);
   mountApi('/import', importRouter);
   mountApi('/contributors', contributorsRouter);
   mountApi('/me', createMeRouter({ config }));
   app.use('/api', apiRouter);
-
-  // Search endpoint
-  app.get('/api/search', async (req, res, next) => {
-    try {
-      const q = boundedString(req.query.q, 'q', MAX_QUERY_LENGTH);
-
-      if (!q || q.trim() === '') {
-        return res.json([]);
-      }
-
-      const searchTerm = q.trim().toLowerCase();
-
-      const recipes = await prisma.recipe.findMany({
-        where: {
-          OR: [
-            { title: { contains: searchTerm, mode: 'insensitive' } },
-            { description: { contains: searchTerm, mode: 'insensitive' } },
-            { ingredients: { some: { name: { contains: searchTerm, mode: 'insensitive' } } } },
-            { tags: { some: { name: { contains: searchTerm, mode: 'insensitive' } } } }
-          ]
-        },
-        include: recipeInclude,
-        orderBy: { updatedAt: 'desc' },
-        take: MAX_LIST_RESULTS
-      });
-
-      res.json(recipes.map(presentRecipe));
-    } catch (error) {
-      next(error);
-    }
-  });
 
   // Health check, and since SERV-128 also the build-identity contract that
   // Switchyard's delivery reconciler polls to record what is actually running

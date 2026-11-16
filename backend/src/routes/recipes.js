@@ -10,6 +10,7 @@ import {
   scalarData
 } from '../services/recipeWrite.js';
 import { boundedString, MAX_LIST_RESULTS, MAX_TAG_LENGTH } from '../middleware/readLimits.js';
+import { getRecipe, createRecipe, assertWithinLimits } from '../services/recipes.js';
 import { assertCanEdit, assertCanDelete } from '../services/ownership.js';
 
 const router = Router();
@@ -41,42 +42,21 @@ router.get('/', async (req, res, next) => {
 // Get single recipe
 router.get('/:id', async (req, res, next) => {
   try {
-    const recipe = await req.prisma.recipe.findUnique({
-      where: { id: req.params.id },
-      include: recipeInclude
-    });
-
+    const recipe = await getRecipe(req.prisma, req.params.id);
     if (!recipe) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
-
-    res.json(presentRecipe(recipe));
+    res.json(recipe);
   } catch (error) {
     next(error);
   }
 });
 
-// Create recipe
+// Create recipe. Attribution comes from the signed-in caller; a contributorId
+// in the body is ignored, never trusted (see createRecipe).
 router.post('/', async (req, res, next) => {
   try {
-    const body = req.body;
-    const tags = processTags(body.tags);
-
-    const recipe = await req.prisma.recipe.create({
-      data: {
-        ...scalarData(body),
-        source: normalizeSource(body.source),
-        // Attribution comes from the signed-in caller; a contributorId in the
-        // body is ignored, never trusted.
-        contributorId: req.contributor.id,
-        ingredients: { create: prepareIngredients(body.ingredients || []) },
-        directions: { create: prepareDirections(body.directions || []) },
-        tags: { connectOrCreate: tagConnect(tags || []) }
-      },
-      include: recipeInclude
-    });
-
-    res.status(201).json(presentRecipe(recipe));
+    res.status(201).json(await createRecipe(req.prisma, req.contributor, req.body));
   } catch (error) {
     next(error);
   }
@@ -87,6 +67,7 @@ router.post('/', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const body = req.body;
+    assertWithinLimits(body);
     const tags = processTags(body.tags);
 
     const recipe = await req.prisma.$transaction(async (tx) => {
