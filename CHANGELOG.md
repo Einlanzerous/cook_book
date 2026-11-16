@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.0](https://github.com/Einlanzerous/cook_book/compare/v2.3.0...v2.4.0) (2026-11-16)
+
+
+### Features
+
+* **mcp:** Commonplace MCP server for the heitan gateway (COOK-49) ([#24](https://github.com/Einlanzerous/cook_book/issues/24)) ([0a4e2a5](https://github.com/Einlanzerous/cook_book/commit/0a4e2a5e22d75b844d271bfaf417e5f7af977653))
+
+
+### Bug Fixes
+
+* **recipe:** fixed-width tinted quantity column, aligned names (COOK-57) ([#26](https://github.com/Einlanzerous/cook_book/issues/26)) ([cc352e3](https://github.com/Einlanzerous/cook_book/commit/cc352e308b8b9c5d85d9559ae99931b8afa95607))
+
 ## [2.3.0](https://github.com/Einlanzerous/cook_book/compare/v2.2.0...v2.3.0) (2026-11-16)
 
 
