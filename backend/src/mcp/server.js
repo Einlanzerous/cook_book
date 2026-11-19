@@ -19,7 +19,8 @@ import { z } from 'zod';
 import { searchRecipes, getRecipe, createRecipe, LIMITS } from '../services/recipes.js';
 import { pickRandomRecipe, MAX_EXCLUDE } from '../services/randomRecipe.js';
 import { listContributors } from '../services/contributors.js';
-import { HttpError } from '../services/recipeWrite.js';
+import { HttpError, isBlankSource } from '../services/recipeWrite.js';
+import { bodyFromJsonLd } from '../services/recipeJsonLd.js';
 import { MAX_QUERY_LENGTH, MAX_TAG_LENGTH, MAX_ID_LENGTH } from '../middleware/readLimits.js';
 import { scaleIngredient } from '../../../shared/quantity.js';
 import { findBoundContributor } from './caller.js';
@@ -33,11 +34,6 @@ const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: fal
 
 const json = (value) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
 const toolError = (message) => ({ content: [{ type: 'text', text: message }], isError: true });
-
-const isBlankSource = (s) => {
-  const v = String(s ?? '').trim().toLowerCase();
-  return v === '' || v === 'manual';
-};
 
 /** The tool descriptions double as the agent-facing documentation. */
 const DESCRIPTIONS = {
@@ -54,7 +50,8 @@ const DESCRIPTIONS = {
     '(a cookbook, a site, a person, e.g. "Salt Fat Acid Heat" or "Gran"); a blank source or the word "manual" is refused. ' +
     'Only people who have already signed in to Commonplace on the web can file recipes; anyone else gets an error saying so. ' +
     `Limits: title ${LIMITS.title} characters, source ${LIMITS.source}, ingredients ${LIMITS.ingredients}, directions ${LIMITS.directions}, ` +
-    `each ingredient or direction text ${LIMITS.directionText}, tags ${LIMITS.tags} (each ${LIMITS.tagLength}). Returns the new id and its public URL.`
+    `each ingredient or direction text ${LIMITS.directionText}, tags ${LIMITS.tags} (each ${LIMITS.tagLength}). ` +
+    'Instead of title, ingredients, directions and the rest you may pass `jsonld`: one schema.org/Recipe (an object or its JSON text, bare or in @graph); `source` is still required. Returns the new id and its public URL.'
 };
 
 const ingredientSchema = z.object({
@@ -113,7 +110,8 @@ export const TOOL_DEFS = {
     title: 'Create a recipe',
     description: DESCRIPTIONS.create_recipe,
     inputSchema: {
-      title: z.string().min(1).max(LIMITS.title),
+      title: z.string().min(1).max(LIMITS.title).optional().describe('Required unless jsonld is given'),
+      jsonld: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe('schema.org/Recipe JSON-LD; replaces the recipe fields'),
       source: z.string().max(LIMITS.source).describe('Where the recipe comes from. Required; not blank, not "manual".'),
       ingredients: z.array(ingredientSchema).max(LIMITS.ingredients).optional(),
       directions: z.array(directionSchema).max(LIMITS.directions).optional(),
@@ -259,7 +257,14 @@ export function createMcpServer({
     const { contributor, matched } = found;
     ctx.setCaller(contributor.id);
     // The body is built from named arguments only: no contributorId can ride along.
-    const body = {
+    let body;
+    if (a.jsonld !== undefined) {
+      const clash = ['title', 'ingredients', 'directions', 'tags', 'prepTime', 'cookTime', 'servings', 'vegetarian'].filter((k) => a[k] !== undefined);
+      if (clash.length) return toolError(`Pass either jsonld or ${clash.join(', ')}, not both.`);
+      body = bodyFromJsonLd(a.jsonld, a.source);
+    } else if (a.title === undefined) {
+      return toolError('title is required unless jsonld is given.');
+    } else body = {
       title: a.title,
       source: a.source,
       ingredients: a.ingredients,
