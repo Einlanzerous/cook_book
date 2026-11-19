@@ -124,7 +124,8 @@ describeDb('public reads against a database', () => {
     '/api/contributors',
     `/api/contributors/${author.id}`,
     '/api/me',
-    '/api/health'
+    '/api/health',
+    '/api/mcp/status'
   ];
 
   it('every public GET answers 200 with no cookie', async () => {

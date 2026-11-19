@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { buildJwks, buildVerifier, buildGatewayVerifier } from './boot.js';
 import { startMcp } from './mcp/http.js';
+import { createMcpStatus } from './mcp/status.js';
 import { warnUnboundOwners } from './services/identity.js';
 
 // Fail closed: a missing or unsafe auth configuration stops the process here,
@@ -15,7 +16,10 @@ const verifyGateway = buildGatewayVerifier(config, jwks);
 
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
-const app = createApp({ prisma, config, verifyAccess });
+// Set once startMcp returns; null while it is off or has not bound yet.
+let mcp = null;
+const mcpStatus = createMcpStatus({ getListener: () => mcp });
+const app = createApp({ prisma, config, verifyAccess, mcpStatus });
 
 // Start server
 app.listen(PORT, () => {
@@ -24,7 +28,7 @@ app.listen(PORT, () => {
 });
 
 // The MCP listener (COOK-49): its own internal port, off unless configured.
-const mcp = await startMcp(config, { prisma, verifyGateway });
+mcp = await startMcp(config, { prisma, verifyGateway });
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
