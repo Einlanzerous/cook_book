@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/Einlanzerous/cook_book/compare/v2.4.1...v2.5.0) (2026-11-19)
+
+
+### Features
+
+* **connect:** Connect screen with client configs and health test (COOK-15) ([#29](https://github.com/Einlanzerous/cook_book/issues/29)) ([eaa31bd](https://github.com/Einlanzerous/cook_book/commit/eaa31bd1567fb0c428753ea9a0aff09ea86cdf50))
+
 ## [2.4.1](https://github.com/Einlanzerous/cook_book/compare/v2.4.0...v2.4.1) (2026-11-16)
 
 
