@@ -39,8 +39,7 @@ export const routes = [
   {
     path: '/connect',
     name: 'connect',
-    component: () => import('../views/PlaceholderView.vue'),
-    props: { eyebrow: 'Connect · MCP', title: 'Let your agent cook from the book.' }
+    component: () => import('../views/ConnectView.vue')
   },
   {
     path: '/edit/:id',
