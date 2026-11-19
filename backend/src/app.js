@@ -42,7 +42,7 @@ export function createApiRegistry() {
  * `jsonParser` is injectable only so a test can prove the write guard rejects
  * a request before any body is parsed.
  */
-export function createApp({ prisma, config, verifyAccess, jsonParser = express.json(), log = console.log }) {
+export function createApp({ prisma, config, verifyAccess, jsonParser = express.json(), log = console.log, mcpStatus = async () => ({ enabled: false }) }) {
   const app = express();
 
   // No cors(): the SPA is same-origin, so no Access-Control-Allow-Origin is
@@ -88,6 +88,18 @@ export function createApp({ prisma, config, verifyAccess, jsonParser = express.j
   mountApi('/import', importRouter);
   mountApi('/contributors', contributorsRouter);
   mountApi('/me', createMeRouter({ config }));
+  // Connect screen (COOK-15): public read, no input, reveals a boolean and a count.
+  const mcpRouter = express.Router();
+  mcpRouter.get('/status', async (req, res, next) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      const s = await mcpStatus();
+      res.json(s.enabled ? { enabled: true, tools: s.tools } : { enabled: false });
+    } catch (err) {
+      next(err);
+    }
+  });
+  mountApi('/mcp', mcpRouter);
   app.use('/api', apiRouter);
 
   // Health check, and since SERV-128 also the build-identity contract that

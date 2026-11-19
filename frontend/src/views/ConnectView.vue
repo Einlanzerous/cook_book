@@ -1,8 +1,8 @@
 <script setup>
 // Connect screen (COOK-15, canvas 04). Public and read-only (COOK-41): no session,
 // no write controls. The buttons here only copy text or run a read-only check.
-import { ref, computed } from 'vue'
-import { healthApi } from '../services/api'
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { healthApi, mcpApi } from '../services/api'
 import { BUNDLES, bundleUrl, clientConfigs } from '../utils/connect'
 
 const bundle = BUNDLES[0]
@@ -13,6 +13,7 @@ const active = computed(() => clients.find((c) => c.id === client.value))
 
 const copied = ref('')
 let timer
+onBeforeUnmount(() => clearTimeout(timer))
 async function copy(which, text) {
   try {
     await navigator.clipboard?.writeText(text)
@@ -24,34 +25,39 @@ async function copy(which, text) {
   timer = setTimeout(() => (copied.value = ''), 1400)
 }
 
-// idle | testing | ok | failed. This checks cook_book itself at /api/health;
-// the MCP listener is internal and the browser cannot reach it.
+// idle | testing | running | off | failed. The test asks cook_book itself:
+// /api/health for the app's build, /api/mcp/status for the MCP listener (probed
+// server side; the browser cannot reach it). It never claims heitan or Cloudflare
+// Access works: only a client's own connection proves that.
 const state = ref('idle')
 const health = ref(null)
+const mcp = ref(null)
 async function runTest() {
   state.value = 'testing'
-  try {
-    const { data } = await healthApi.get()
-    health.value = data
-    state.value = data?.status === 'ok' ? 'ok' : 'failed'
-  } catch {
-    health.value = null
-    state.value = 'failed'
-  }
+  const [h, m] = await Promise.allSettled([healthApi.get(), mcpApi.status()])
+  health.value = h.status === 'fulfilled' && h.value.data?.status === 'ok' ? h.value.data : null
+  mcp.value = m.status === 'fulfilled' ? m.value.data : null
+  if (!health.value || !mcp.value) state.value = 'failed'
+  else state.value = mcp.value.enabled === true && Number.isInteger(mcp.value.tools) ? 'running' : 'off'
 }
 
-const dot = { idle: 'bg-faint', testing: 'bg-muted', ok: 'bg-ok', failed: 'bg-danger' }
-const label = { idle: 'Not tested yet', testing: 'Connecting…', ok: 'Connected', failed: 'Could not connect' }
+const dot = { idle: 'bg-faint', testing: 'bg-muted', running: 'bg-ok', off: 'bg-muted', failed: 'bg-danger' }
+const label = {
+  idle: 'Not tested yet',
+  testing: 'Checking…',
+  running: 'Commonplace MCP server is running',
+  off: 'MCP not enabled',
+  failed: 'Could not check'
+}
 
 const facts = computed(() => {
   const h = health.value || {}
   const rows = [
-    { k: 'Status', v: h.status },
+    { k: 'App', v: h.status === 'ok' ? 'up' : null },
     { k: 'Version', v: h.version },
     { k: 'Build', v: h.sha ? String(h.sha).slice(0, 7) : null },
   ]
-  // Shown only when the server reports it; the field is not part of the contract yet.
-  if (Number.isInteger(h.tools)) rows.push({ k: 'Tools', v: `${h.tools} available` })
+  if (state.value === 'running') rows.push({ k: 'Tools', v: `${mcp.value.tools} available` })
   return rows.map((r) => ({ ...r, v: r.v || '—' }))
 })
 </script>
@@ -114,14 +120,14 @@ const facts = computed(() => {
             @click="runTest"
           >Test connection</button>
         </div>
-        <dl v-if="state === 'ok'" class="grid gap-3.5 border-t border-rule-soft pt-4 [grid-template-columns:repeat(auto-fit,minmax(120px,1fr))]">
+        <dl v-if="state === 'running' || state === 'off'" class="grid gap-3.5 border-t border-rule-soft pt-4 [grid-template-columns:repeat(auto-fit,minmax(120px,1fr))]">
           <div v-for="r in facts" :key="r.k" class="flex flex-col gap-1">
             <dt class="eyebrow">{{ r.k }}</dt>
             <dd class="font-mono text-sm">{{ r.v }}</dd>
           </div>
         </dl>
-        <span v-else-if="state === 'idle'" class="text-sm text-muted">Checks the build at /api/health.</span>
-        <span v-else-if="state === 'failed'" class="text-sm text-danger">The health check did not answer ok.</span>
+        <span v-else-if="state === 'idle'" class="text-sm text-muted">Checks this app's build and whether its MCP server is running. It does not test the gateway sign-in: your client does that when you connect.</span>
+        <span v-else-if="state === 'failed'" class="text-sm text-danger">The app did not answer its health or MCP status checks.</span>
       </div>
     </div>
   </section>

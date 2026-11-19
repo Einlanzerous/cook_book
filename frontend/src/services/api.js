@@ -93,6 +93,14 @@ export const healthApi = {
   }
 }
 
+// Is the MCP listener running, and how many read tools it offers (COOK-15).
+// Resolves to { enabled: false } or { enabled: true, tools }.
+export const mcpApi = {
+  status() {
+    return api.get('/mcp/status')
+  }
+}
+
 // Sign-in lives outside /api: /auth/sso is a full-page navigation (a plain link),
 // and sign-out is a bodyless POST.
 const authClient = axios.create({ baseURL: '/auth' })

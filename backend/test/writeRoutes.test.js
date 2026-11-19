@@ -79,7 +79,7 @@ describeDb('write gate coverage (criterion 1)', () => {
   });
 
   it('the allowlist of public writes is empty: reads stay public', async () => {
-    for (const url of ['/api/recipes', '/api/tags', '/api/contributors', '/api/search?q=x', '/api/health', '/api/me']) {
+    for (const url of ['/api/recipes', '/api/tags', '/api/contributors', '/api/search?q=x', '/api/health', '/api/me', '/api/mcp/status']) {
       expect((await request(t.app).get(url)).status, url).toBe(200);
     }
   });
