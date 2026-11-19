@@ -26,7 +26,7 @@ const MAX_NODES = 5000;
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const asList = (v) => (v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]);
 const str = (v) => (typeof v === 'string' ? v.trim() : typeof v === 'number' && Number.isFinite(v) ? String(v) : '');
-const hasType = (node, type) => asList(node?.['@type']).some((t) => typeof t === 'string' && t.replace(/^.*[/#]/, '') === type);
+const hasType = (node, type) => asList(node?.['@type']).some((t) => typeof t === 'string' && t.replace(/^.*[/#:]/, '') === type);
 
 /** The one Recipe node in a JSON-LD document: a bare object, an array, or an @graph. */
 export function findRecipeNode(input) {
@@ -46,6 +46,7 @@ export function findRecipeNode(input) {
     if (!isObject(node)) return;
     if (hasType(node, 'Recipe')) return void found.push(node);
     if (node['@graph'] !== undefined) walk(node['@graph'], depth + 1);
+    if (node.mainEntity !== undefined) walk(node.mainEntity, depth + 1);
   };
   walk(doc, 0);
   if (found.length === 0) throw new HttpError(400, 'jsonld has no schema.org/Recipe object');
@@ -103,8 +104,13 @@ function directionsOf(value) {
     if (typeof node === 'string') return push(node, heading);
     if (!isObject(node)) return;
     if (node.itemListElement !== undefined) {
-      // A section: its name heads the first step that has text.
+      // A section: its name heads the first step that has text. A HowToStep
+      // that has its own text keeps it, ahead of its child directions.
       let pending = str(node.name) || heading;
+      if (str(node.text)) {
+        push(str(node.text), pending);
+        pending = null;
+      }
       for (const child of asList(node.itemListElement)) {
         const before = out.length;
         walk(child, pending, depth + 1);
@@ -159,7 +165,7 @@ export function jsonLdToRecipeBody(input) {
     .filter((t) => !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
     .slice(0, LIMITS.tags);
 
-  if (asList(node.suitableForDiet).some((d) => /(^|[/#])VegetarianDiet$/.test(str(isObject(d) ? d['@id'] : d)))) {
+  if (asList(node.suitableForDiet).some((d) => /(^|[/#:])(Vegetarian|Vegan)Diet$/.test(str(isObject(d) ? d['@id'] : d)))) {
     body.vegetarian = true;
   }
 

@@ -98,6 +98,19 @@ describe('wrappers', () => {
     expect(findRecipeNode([{ '@type': 'WebPage' }, promptRecipe])).toBe(promptRecipe);
     expect(jsonLdToRecipeBody(JSON.stringify(promptRecipe)).title).toBe('Lemon Lentil Soup');
   });
+  it('finds a Recipe under WebPage.mainEntity and with a prefixed @type', () => {
+    expect(jsonLdToRecipeBody({ '@type': 'WebPage', mainEntity: { '@type': 'schema:Recipe', name: 'Deep' } }).title).toBe('Deep');
+  });
+  it('keeps a HowToStep own text ahead of its child directions', () => {
+    const { directions } = jsonLdToRecipeBody({
+      '@type': 'Recipe', name: 'x',
+      recipeInstructions: [{ '@type': 'HowToStep', name: 'Prep', text: 'Prep everything', itemListElement: [{ '@type': 'HowToDirection', text: 'Chop' }] }]
+    });
+    expect(directions).toEqual([{ instruction: 'Prep everything', heading: 'Prep' }, { instruction: 'Chop', heading: null }]);
+  });
+  it('treats VeganDiet as vegetarian', () => {
+    expect(jsonLdToRecipeBody({ '@type': 'Recipe', name: 'x', suitableForDiet: ['https://schema.org/VeganDiet'] }).vegetarian).toBe(true);
+  });
   it('ignores unknown fields', () => {
     expect(jsonLdToRecipeBody({ '@type': 'Recipe', name: 'x', aggregateRating: { ratingValue: 5 }, nutrition: {}, video: 'v' }).title).toBe('x');
   });
