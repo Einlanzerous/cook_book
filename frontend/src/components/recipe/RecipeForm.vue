@@ -183,7 +183,7 @@ function cancel() {
           <input v-model="form.cuisine" type="text" class="input" placeholder="Korean" />
         </label>
         <label class="flex cursor-pointer items-center gap-3 py-2 text-base text-ink">
-          <input v-model="form.vegetarian" type="checkbox" class="h-4 w-4 rounded-sm border-rule-strong text-fir focus:ring-fir" />
+          <input v-model="form.vegetarian" type="checkbox" class="h-4 w-4 rounded-sm border-rule-strong text-fir accent-fir focus:ring-fir" />
           Vegetarian
         </label>
       </div>

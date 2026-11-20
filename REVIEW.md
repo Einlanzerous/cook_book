@@ -16,6 +16,15 @@ runs the Vitest suites (backend against a Postgres 16 service, frontend under
 jsdom) in a `test` job; until then the repo has no automated tests, so a green
 check says little about behaviour. A green check on a docs-only PR means nothing.
 
+## Frontend (diffs that touch `.vue` or `.css`)
+Firefox is the primary browser (README, "Browser target"). Advisory unless it breaks Firefox.
+- Motion (animation, transition) is gated on `prefers-reduced-motion`.
+- Modals use `<dialog>` and `showModal()`, with a backdrop-click light dismiss (Firefox lacks `closedby`).
+- Enter/comma key handlers on text inputs guard `e.isComposing` (IME).
+- No `outline: none` without a `:focus-visible` ring.
+- New CSS features are in Firefox, or sit behind `@supports` with a working fallback.
+- No `::-webkit-` rule without its standard property.
+
 ## Severity
 - **Blocking:** data loss, a migration that is not additive/expand-only without
   a stated rollback, a broken `/api/health` contract (`version`, `sha`), an
