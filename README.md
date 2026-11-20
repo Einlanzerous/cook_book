@@ -42,6 +42,10 @@ Create new recipes with a comprehensive form for ingredients, directions, and ta
 - PostgreSQL database
 - Prisma ORM
 
+### Browser target
+
+Firefox is the primary browser. Target Baseline Widely available plus current Firefox ESR; anything newer ships as progressive enhancement behind `@supports` or feature detection. The target is declared in `frontend/package.json` (`browserslist`, read by autoprefixer) and `frontend/vite.config.js` (`build.target`).
+
 ## Getting Started
 
 ### Prerequisites

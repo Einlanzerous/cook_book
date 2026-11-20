@@ -11,12 +11,30 @@
 @layer base {
   html {
     @apply bg-page;
+    /* The page is light-only: keep native controls and scrollbars light too. */
+    color-scheme: light;
+    accent-color: theme('colors.fir.DEFAULT');
+  }
+  /* A modal <dialog> inerts the page but does not stop it scrolling. */
+  body:has(dialog:modal) {
+    overflow: hidden;
   }
   body {
     @apply bg-page font-sans text-ink antialiased;
   }
   :focus-visible {
     @apply outline outline-2 outline-offset-2 outline-fir;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -41,6 +59,29 @@
   }
   .input:focus {
     box-shadow: 0 1px 0 0 theme('colors.fir.DEFAULT');
+  }
+
+  /* Required-field styling only once the user has interacted (Firefox 88+). */
+  .input:user-invalid {
+    @apply border-danger;
+  }
+  /* Grow textareas with their text where supported (not Firefox yet); `rows` stays the fallback. */
+  @supports (field-sizing: content) {
+    textarea.input {
+      field-sizing: content;
+      /* Without a floor an empty field collapses to one line; this approximates rows=2 plus py-2. */
+      min-height: calc(2lh + 1rem);
+    }
+  }
+  /* box-shadow is dropped in forced-colors mode, so keep a visible focus cue on the underline. */
+  @media (forced-colors: active) {
+    .input {
+      border-bottom-color: ButtonBorder;
+    }
+    .input:focus {
+      border-bottom-color: Highlight;
+      border-bottom-width: 2px;
+    }
   }
 
   /* Mono uppercase eyebrow / field label. */

@@ -1,10 +1,21 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia } from 'pinia'
 import { useMe } from '../../stores/me'
 import PickerModal from './PickerModal.vue'
 import { recipeApi } from '../../services/api'
+
+// jsdom has no <dialog> methods: model showModal/close (open attribute, `close` event).
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.setAttribute('open', '')
+  }
+  HTMLDialogElement.prototype.close = function () {
+    this.removeAttribute('open')
+    this.dispatchEvent(new Event('close'))
+  }
+})
 
 vi.mock('../../services/api', () => ({ recipeApi: { random: vi.fn() } }))
 
@@ -42,7 +53,7 @@ async function setup(props = { show: true }, { signedIn = true } = {}) {
   const wrapper = mount(PickerModal, {
     props,
     attachTo: document.body,
-    global: { plugins: [router, pinia], stubs: { teleport: true } }
+    global: { plugins: [router, pinia] }
   })
   mounted.push(wrapper)
   await flushPromises()
@@ -58,12 +69,11 @@ describe('PickerModal', () => {
   afterEach(() => {
     mounted.splice(0).forEach((w) => w.unmount())
     document.body.innerHTML = ''
-    document.body.style.overflow = ''
-  })
+      })
 
   it('renders nothing while closed and does not call the API', async () => {
     const { wrapper } = await setup({ show: false })
-    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.find('dialog').element.open).toBe(false)
     expect(recipeApi.random).not.toHaveBeenCalled()
   })
 
@@ -178,20 +188,22 @@ describe('PickerModal', () => {
   })
 
   describe('modal behaviour', () => {
-    it('is a labelled aria-modal dialog and takes focus', async () => {
+    it('is a labelled native dialog opened with showModal and takes focus', async () => {
       recipeApi.random.mockResolvedValue(reply(bibimbap))
       const { wrapper } = await setup()
-      const dlg = wrapper.find('[role="dialog"]')
-      expect(dlg.attributes('aria-modal')).toBe('true')
+      const dlg = wrapper.find('dialog')
+      expect(dlg.element.open).toBe(true)
       const label = document.getElementById(dlg.attributes('aria-labelledby'))
       expect(label.textContent).toContain("Tonight you're making")
       expect(document.activeElement).toBe(dlg.element)
     })
 
-    it('Escape closes', async () => {
+    it('Escape (the native cancel event) closes through the parent and is not left to the browser', async () => {
       recipeApi.random.mockResolvedValue(reply(bibimbap))
       const { wrapper } = await setup()
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      const cancel = new Event('cancel', { cancelable: true })
+      wrapper.find('dialog').element.dispatchEvent(cancel)
+      expect(cancel.defaultPrevented).toBe(true)
       expect(wrapper.emitted('close')).toHaveLength(1)
     })
 
@@ -200,33 +212,11 @@ describe('PickerModal', () => {
       const { wrapper } = await setup()
       await wrapper.find('h2').trigger('click')
       expect(wrapper.emitted('close')).toBeUndefined()
-      await wrapper.find('[data-testid="picker-backdrop"]').trigger('click')
+      await wrapper.find('dialog').trigger('click')
       expect(wrapper.emitted('close')).toHaveLength(1)
     })
 
-    it('traps Tab and Shift+Tab inside the dialog', async () => {
-      recipeApi.random.mockResolvedValue(reply(bibimbap))
-      const { wrapper } = await setup()
-      const buttons = wrapper.findAll('button').map((b) => b.element)
-      const first = buttons[0]
-      const last = buttons[buttons.length - 1]
-      last.focus()
-      const tab = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
-      document.dispatchEvent(tab)
-      expect(tab.defaultPrevented).toBe(true)
-      expect(document.activeElement).toBe(first)
-      const back = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true })
-      document.dispatchEvent(back)
-      expect(back.defaultPrevented).toBe(true)
-      expect(document.activeElement).toBe(last)
-      // Tab in the middle is left to the browser
-      buttons[1].focus()
-      const mid = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
-      document.dispatchEvent(mid)
-      expect(mid.defaultPrevented).toBe(false)
-    })
-
-    it('returns focus to the opener and unlocks scroll when closed', async () => {
+    it('closes the dialog and returns focus to the opener when hidden', async () => {
       recipeApi.random.mockResolvedValue(reply(bibimbap))
       const opener = document.createElement('button')
       document.body.appendChild(opener)
@@ -234,12 +224,12 @@ describe('PickerModal', () => {
       const { wrapper } = await setup({ show: false })
       await wrapper.setProps({ show: true })
       await flushPromises()
-      expect(document.body.style.overflow).toBe('hidden')
+      expect(wrapper.find('dialog').element.open).toBe(true)
       expect(document.activeElement).not.toBe(opener)
       await wrapper.setProps({ show: false })
       await flushPromises()
+      expect(wrapper.find('dialog').element.open).toBe(false)
       expect(document.activeElement).toBe(opener)
-      expect(document.body.style.overflow).toBe('')
     })
   })
 })

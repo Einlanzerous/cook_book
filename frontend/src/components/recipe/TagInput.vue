@@ -43,6 +43,8 @@ function removeTag(index) {
 }
 
 function handleKeydown(e) {
+  // An IME composition uses Enter and , to pick candidates; keyCode 229 covers Safari's late compositionend.
+  if (e.isComposing || e.keyCode === 229) return
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault()
     if (inputValue.value.trim()) {
