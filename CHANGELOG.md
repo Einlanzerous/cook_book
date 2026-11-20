@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.6.0](https://github.com/Einlanzerous/cook_book/compare/v2.5.0...v2.6.0) (2026-11-20)
+
+
+### Features
+
+* **api:** accept schema.org/Recipe JSON-LD in create_recipe and REST import (COOK-14) ([#31](https://github.com/Einlanzerous/cook_book/issues/31)) ([99fed6f](https://github.com/Einlanzerous/cook_book/commit/99fed6fce6be0636fa8a2bf38537146413f53c11))
+
+
+### Bug Fixes
+
+* **web:** frontend quality pass, native picker dialog, reduced motion (COOK-65) ([#33](https://github.com/Einlanzerous/cook_book/issues/33)) ([edd15f4](https://github.com/Einlanzerous/cook_book/commit/edd15f45fed4b9d39161c0260e71c51d26de9bfb))
+
 ## [2.5.0](https://github.com/Einlanzerous/cook_book/compare/v2.4.1...v2.5.0) (2026-11-19)
 
 
