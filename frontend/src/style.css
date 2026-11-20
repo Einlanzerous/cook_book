@@ -69,6 +69,8 @@
   @supports (field-sizing: content) {
     textarea.input {
       field-sizing: content;
+      /* Without a floor an empty field collapses to one line; this approximates rows=2 plus py-2. */
+      min-height: calc(2lh + 1rem);
     }
   }
   /* box-shadow is dropped in forced-colors mode, so keep a visible focus cue on the underline. */
