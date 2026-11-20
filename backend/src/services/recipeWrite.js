@@ -47,6 +47,12 @@ export function normalizeSource(source) {
   return s ?? 'manual';
 }
 
+/** A source that names nothing: blank, or the 'manual' placeholder. */
+export const isBlankSource = (source) => {
+  const v = String(source ?? '').trim().toLowerCase();
+  return v === '' || v === 'manual';
+};
+
 /**
  * Tag names: trimmed, Title-Cased, de-duplicated. The write path no longer adds
  * time-bucket, cuisine, category or 'Vegetarian' tags (those are columns).

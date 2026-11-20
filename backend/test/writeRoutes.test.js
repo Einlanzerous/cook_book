@@ -17,6 +17,7 @@ const EXPECTED_WRITES = [
   'DELETE /api/recipes/:id',
   'POST /api/import/hellofresh',
   'POST /api/import/hellofresh/preview',
+  'POST /api/import/jsonld',
   'POST /api/recipes',
   'PUT /api/recipes/:id'
 ];

@@ -12,6 +12,7 @@ import { scaleRecipe, summarise, TOOL_NAMES } from '../src/mcp/server.js';
 import { findBoundContributor } from '../src/mcp/caller.js';
 import { LIMITS } from '../src/services/recipes.js';
 import { HttpError } from '../src/services/recipeWrite.js';
+import { promptRecipe, inGraph, withSections } from './fixtures/jsonld.js';
 
 const rep = (n) => 'x'.repeat(n);
 const valid = (over = {}) => ({
@@ -329,6 +330,78 @@ describeDb('MCP tools against Postgres', () => {
       expect(all).not.toContain('secret detail');
       expect(all).not.toContain('lentils');
       expect(all).toContain('mcp.error tool=create_recipe name=Error code=P1001');
+    });
+  });
+
+  describe('COOK-14: create_recipe takes schema.org/Recipe JSON-LD', () => {
+    it('files the prompt-shaped recipe under the caller and it reads back as the detail page needs', async () => {
+      const client = await asAnn();
+      const out = toolJson(await client.callTool({ name: 'create_recipe', arguments: { source: 'Gran', jsonld: promptRecipe } }));
+      const got = toolJson(await client.callTool({ name: 'get_recipe', arguments: { id: out.id } }));
+      expect(got).toMatchObject({
+        title: 'Lemon Lentil Soup', source: 'Gran', sourceUrl: 'https://example.com/lentil-soup', servings: 4,
+        prepTime: 10, cookTime: 35, totalMinutes: 45, category: 'Soup', cuisine: 'Mediterranean', vegetarian: true,
+        contributor: { name: 'Ann' }
+      });
+      expect(got.ingredients.map((i) => [i.amount, i.unit, i.name, i.quantity])).toEqual([
+        ['1 1/2', 'cups', 'red lentils', 1.5], ['2', 'cloves', 'garlic, minced', 2], ['1-2', 'tbsp', 'olive oil', null],
+        ['1/2', 'tsp', 'cumin', 0.5], [null, null, 'salt to taste', null]
+      ]);
+      expect(got.directions).toHaveLength(3);
+      expect(got.tags.map((t) => t.name).sort()).toEqual(['Lentil', 'Soup', 'Weeknight']);
+    });
+
+    it('accepts JSON text, an @graph, and sections with headings', async () => {
+      const client = await asAnn();
+      const a = toolJson(await client.callTool({ name: 'create_recipe', arguments: { source: 'Site', jsonld: JSON.stringify(inGraph) } }));
+      expect((await prisma.recipe.findUnique({ where: { id: a.id } })).title).toBe('Graph Pancakes');
+      const b = toolJson(await client.callTool({ name: 'create_recipe', arguments: { source: 'Site', jsonld: withSections } }));
+      const dirs = await prisma.direction.findMany({ where: { recipeId: b.id }, orderBy: { stepNumber: 'asc' } });
+      expect(dirs.map((d) => d.heading)).toEqual(['Cake', null, 'Frosting', null]);
+    });
+
+    it('still requires a source: none, blank or manual is refused and nothing is written', async () => {
+      const client = await asAnn();
+      const before = await prisma.recipe.count();
+      for (const source of [undefined, '  ', 'manual']) {
+        expect((await call(client, 'create_recipe', { source, jsonld: promptRecipe })).isError).toBe(true);
+      }
+      expect(await prisma.recipe.count()).toBe(before);
+    });
+
+    it('keeps the identity rules: an unbound caller is refused', async () => {
+      await start();
+      const client = await kit.connect(await kit.assertion({ email: 'bob@example.com', sub: 'heitan-sub-bob' }));
+      const before = await prisma.recipe.count();
+      const res = await call(client, 'create_recipe', { source: 'Gran', jsonld: promptRecipe });
+      expect(res.text).toContain('not signed in');
+      expect(await prisma.recipe.count()).toBe(before);
+    });
+
+    it('refuses jsonld together with recipe fields, a missing title, and documents with no usable Recipe', async () => {
+      const client = await asAnn();
+      const before = await prisma.recipe.count();
+      expect((await call(client, 'create_recipe', { source: 's', jsonld: promptRecipe, title: 'x' })).text).toMatch(/either jsonld or title/);
+      expect((await call(client, 'create_recipe', { source: 's' })).text).toMatch(/title is required/);
+      expect((await call(client, 'create_recipe', { source: 's', jsonld: '{bad' })).text).toMatch(/not valid JSON/);
+      expect((await call(client, 'create_recipe', { source: 's', jsonld: { '@type': 'Article' } })).text).toMatch(/no schema.org\/Recipe/);
+      expect(await prisma.recipe.count()).toBe(before);
+    });
+
+    it.each([
+      ['title', { name: rep(LIMITS.title + 1) }, /title is too long/],
+      ['ingredient count', { recipeIngredient: Array.from({ length: LIMITS.ingredients + 1 }, () => '1 egg') }, /ingredients takes at most/],
+      ['direction count', { recipeInstructions: Array.from({ length: LIMITS.directions + 1 }, () => 'Stir.') }, /directions takes at most/],
+      ['ingredient text', { recipeIngredient: [rep(LIMITS.ingredientText + 1)] }, /too long/],
+      ['direction text', { recipeInstructions: [rep(LIMITS.directionText + 1)] }, /too long/],
+      ['section heading', { recipeInstructions: [{ '@type': 'HowToSection', name: rep(LIMITS.directionText + 1), itemListElement: [{ text: 'a' }] }] }, /too long/]
+    ])('the %s cap still applies after mapping and writes no row', async (_n, patch, msg) => {
+      const client = await asAnn();
+      const before = await prisma.recipe.count();
+      const res = await call(client, 'create_recipe', { source: 's', jsonld: { '@type': 'Recipe', name: 'Cap', ...patch } });
+      expect(res.isError).toBe(true);
+      expect(res.text).toMatch(msg);
+      expect(await prisma.recipe.count()).toBe(before);
     });
   });
 

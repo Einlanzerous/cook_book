@@ -7,6 +7,7 @@ import searchRouter from './routes/search.js';
 import tagsRouter from './routes/tags.js';
 import importRouter from './routes/import.js';
 import importPreviewRouter from './routes/importPreview.js';
+import importJsonLdRouter from './routes/importJsonLd.js';
 import contributorsRouter from './routes/contributors.js';
 import { createAuthRouter, createMeRouter } from './routes/auth.js';
 import { createWriteGuard } from './middleware/writeGuard.js';
@@ -86,6 +87,7 @@ export function createApp({ prisma, config, verifyAccess, jsonParser = express.j
   mountApi('/tags', tagsRouter);
   mountApi('/import', importPreviewRouter);
   mountApi('/import', importRouter);
+  mountApi('/import', importJsonLdRouter);
   mountApi('/contributors', contributorsRouter);
   mountApi('/me', createMeRouter({ config }));
   // Connect screen (COOK-15): public read, no input, reveals a boolean and a count.
