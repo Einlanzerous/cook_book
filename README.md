@@ -44,7 +44,7 @@ Create new recipes with a comprehensive form for ingredients, directions, and ta
 
 ### Browser target
 
-Firefox is the primary browser. Target Baseline Widely available plus current Firefox ESR; anything newer ships as progressive enhancement behind `@supports` or feature detection. The target is declared in `frontend/package.json` (`browserslist`, read by autoprefixer) and `frontend/vite.config.js` (`build.target`).
+Firefox is the primary browser. Floor: Firefox 160 (the Firefox release when this was set; the quarterly `frontend-audit` run raises it). Anything newer is progressive enhancement behind `@supports` or feature detection. The target is declared in `frontend/package.json` (`browserslist`, read by autoprefixer) and `frontend/vite.config.js` (`build.target`).
 
 ## Getting Started
 

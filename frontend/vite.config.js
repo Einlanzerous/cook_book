@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [vue()],
   build: {
     // Firefox is the primary browser (see README, Browser target). Keep in step with browserslist.
-    target: ['es2022', 'firefox128', 'chrome111', 'safari16.4']
+    target: ['es2022', 'firefox160', 'chrome111', 'safari16.4']
   },
   test: {
     environment: 'jsdom',

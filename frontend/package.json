@@ -4,7 +4,7 @@
   "type": "module",
   "browserslist": [
     "baseline widely available",
-    "firefox esr"
+    "firefox >= 160"
   ],
   "scripts": {
     "dev": "vite",

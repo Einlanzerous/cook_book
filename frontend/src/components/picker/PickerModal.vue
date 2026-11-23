@@ -77,7 +77,7 @@ function cook() {
 }
 
 // The native <dialog> gives us the top layer, the focus trap, inert background and
-// Escape. Firefox has no `closedby`, so light dismiss is a click on the backdrop
+// Escape. `closedby` is not in every supported browser (Safari lacks it), so light dismiss is a click on the backdrop
 // (the dialog has no padding, so a click whose target is the dialog itself hit the backdrop).
 function open() {
   const el = dlg.value
