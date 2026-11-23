@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.1](https://github.com/Einlanzerous/cook_book/compare/v2.6.0...v2.6.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **web:** raise the browser floor to Firefox 160 (COOK-67) ([#34](https://github.com/Einlanzerous/cook_book/issues/34)) ([65d8537](https://github.com/Einlanzerous/cook_book/commit/65d8537c4044c4a47e7d0e1379621c6c37a4f423))
+
 ## [2.6.0](https://github.com/Einlanzerous/cook_book/compare/v2.5.0...v2.6.0) (2026-11-20)
 
 
